@@ -25,5 +25,8 @@ venv/
 wandb/
 .ruff_cache/
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
