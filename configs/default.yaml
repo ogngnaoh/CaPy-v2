@@ -1,0 +1,7 @@
+defaults:
+  - data: lincs
+  - model: tri_modal
+  - training: default
+
+seed: 42
+project_name: capy-v2

@@ -1,0 +1,61 @@
+# Core 8-condition ablation matrix (40 total runs)
+# See PRD Appendix C for rationale
+
+configs:
+  B0:
+    name: random_baseline
+    description: "Random embeddings (absolute baseline)"
+    model: null  # No training, random embeddings
+    seeds: [42]
+
+  B1:
+    name: mol_only
+    description: "Mol-only (ECFP features, no training)"
+    model: null
+    modalities: [mol]
+    seeds: [42]
+
+  B2:
+    name: morph_only
+    description: "Morph-only (CP features, no training)"
+    model: null
+    modalities: [morph]
+    seeds: [42]
+
+  B3:
+    name: expr_only
+    description: "Expr-only (L1000 features, no training)"
+    model: null
+    modalities: [expr]
+    seeds: [42]
+
+  B4:
+    name: bi_mol_morph
+    description: "Mol↔Morph bi-modal (CLOOME-equivalent)"
+    model: bi_mol_morph
+    seeds: [42, 123, 456, 789, 1024]
+
+  B5:
+    name: bi_mol_expr
+    description: "Mol↔Expr bi-modal"
+    model: bi_mol_expr
+    seeds: [42, 123, 456, 789, 1024]
+
+  B6:
+    name: bi_morph_expr
+    description: "Morph↔Expr bi-modal"
+    model: bi_morph_expr
+    seeds: [42, 123, 456, 789, 1024]
+
+  T1:
+    name: tri_modal
+    description: "Mol↔Morph↔Expr tri-modal (CaPy core claim)"
+    model: tri_modal
+    seeds: [42, 123, 456, 789, 1024]
+
+# Statistical testing
+statistics:
+  test: welch_t
+  correction: bonferroni
+  alpha: 0.05
+  comparisons: [[T1, B4], [T1, B5], [T1, B6]]

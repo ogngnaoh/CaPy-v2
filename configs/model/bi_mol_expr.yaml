@@ -1,0 +1,22 @@
+# B5: Bi-modal mol + expr
+name: bi_mol_expr
+modalities: [mol, expr]
+
+mol_encoder:
+  input_dim: 2048
+  hidden_dims: [1024, 1024, 1024]
+  output_dim: 512
+  dropout: 0.1
+
+expr_encoder:
+  input_dim: 978
+  hidden_dims: [1024, 1024]
+  output_dim: 512
+  dropout: 0.1
+
+projection:
+  input_dim: 512
+  hidden_dim: 512
+  output_dim: 256
+
+embedding_dim: 256

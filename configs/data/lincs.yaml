@@ -1,0 +1,31 @@
+# LINCS cpg0004 dataset configuration
+name: lincs
+
+sources:
+  morphology:
+    url: "s3://cellpainting-gallery/cpg0004-lincs/"
+    local_path: "data/raw/morphology/"
+  expression:
+    url: "https://figshare.com/ndownloader/articles/13181966/versions/2"
+    local_path: "data/raw/expression/"
+  metadata:
+    url: "https://s3.amazonaws.com/data.clue.io/repurposing/downloads/repurposing_samples_20200324.txt"
+    local_path: "data/raw/metadata/repurposing_samples.txt"
+
+processing:
+  nan_threshold: 0.05
+  clip_range: [-5.0, 5.0]
+  min_replicates: 2
+  replicate_null_samples: 10000
+  replicate_null_percentile: 90
+
+split:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  method: scaffold  # Bemis-Murcko scaffold grouping
+
+output:
+  processed_dir: "data/processed/"
+  report_path: "data/reports/lincs_audit.md"
+  feature_columns_path: "data/processed/feature_columns.json"

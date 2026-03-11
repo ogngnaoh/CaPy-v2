@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make *)",
+      "Bash(pytest *)",
+      "Bash(python scripts/*)",
+      "Bash(ruff *)",
+      "Bash(black *)"
+    ]
+  }
+}

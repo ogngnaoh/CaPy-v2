@@ -1,0 +1,25 @@
+# Training hyperparameters
+optimizer:
+  name: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+
+scheduler:
+  name: cosine
+  warmup_epochs: 10
+
+batch_size: 128
+epochs: 200
+patience: 30  # Early stopping on val mean_R@10
+gradient_clip_max_norm: 1.0
+
+loss:
+  vicreg_lambda: 0.1
+  siglib_bias_init: 0.0
+
+scarf:
+  enabled: true
+  corruption_rate: 0.4
+
+mixed_precision: true  # bfloat16 if CUDA available
+num_workers: 4

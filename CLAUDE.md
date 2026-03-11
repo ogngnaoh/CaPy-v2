@@ -1,0 +1,260 @@
+# CLAUDE.md — CaPy v2
+
+This file provides guidance to Claude Code when working in this repository.
+
+**CaPy v2** (Contrastive Alignment of Phenotypic Yields) is a tri-modal contrastive
+learning framework for drug discovery. It learns a shared 256-dim embedding space
+across molecular structure, cell morphology, and gene expression — then rigorously
+tests whether tri-modal alignment outperforms any bi-modal pair.
+
+Full specifications: `capy_v2_prd.md` (requirements) and `capy_v2_fsd.md` (functional spec).
+These two documents are the authoritative source of truth for all requirements.
+
+---
+
+## STOP — Do NOT Build These (NG1–NG9)
+
+Before implementing anything, check this list. These are **permanent non-goals**:
+
+- **NG1:** Do NOT build a web UI, Streamlit app, or visualization server.
+- **NG2:** Do NOT process raw microscopy images. All morphology input is pre-extracted CellProfiler features (~1,500 dims).
+- **NG3:** Do NOT implement any GNN encoder (GIN, GAT, SchNet). Molecular encoder is ECFP + MLP only.
+- **NG4:** Do NOT implement InfoAlign's context graph, random walk sampling, or decoder-based information bottleneck.
+- **NG5:** Do NOT combine data from different cell lines. CaPy uses only A549 LINCS data.
+- **NG6:** Do NOT implement molecule generation, SMILES generation, or any generative model.
+- **NG7:** Do NOT implement model serving, inference API, or ONNX export.
+- **NG8:** Do NOT add authentication, user accounts, or multi-tenancy.
+- **NG9:** Do NOT use hyperparameter optimization frameworks (Optuna, Ray Tune). Use Hydra multirun with manual grids.
+
+---
+
+## Locked-In Decisions
+
+| Decision | Chosen | Rejected | Rationale |
+|----------|--------|----------|-----------|
+| Molecular encoder | ECFP (2048-bit) + MLP | GIN (collapsed at N<2000, uniformity=−0.22) | Benchmarks show ECFP matches/beats neural encoders |
+| Contrastive loss | SigLIP pairwise | InfoNCE (batch-size limited with log K bound) | SigLIP is batch-size agnostic |
+| Regularization | VICReg (variance + covariance) | None (v1 had encoder collapse) | Variance term directly prevents collapse |
+| Dataset | LINCS cpg0004 (A549) | CDRP-bio (U2OS, 15× less data) | Better cross-modality alignment per Rosetta paper |
+| Config management | Hydra | Raw omegaconf / argparse | Structured overrides, multirun, config groups |
+| Experiment tracking | Weights & Biases | TensorBoard | Better sweep management, team features |
+| Normalization | BatchNorm in encoders | LayerNorm | Standard for MLP encoders in contrastive learning |
+| Split strategy | Scaffold-based (Bemis-Murcko) | Random split | Prevents molecular structure leakage |
+
+---
+
+## Open Decisions
+
+| ID | Question | Status | Impact |
+|----|----------|--------|--------|
+| OPEN-1 | Should dose be treated as augmentation (SupCon) or independent treatments? | **BLOCKING** | Changes effective N from 1,327 to 7,900 |
+| OPEN-2 | L1000 Level 4 (replicate-level, noisier) vs Level 5 (treatment-level, cleaner)? | **BLOCKING** | Affects FR-1.2, preprocessing pipeline |
+| OPEN-3 | Optimal SCARF corruption rate for Cell Painting features? | Non-blocking | Default 40%, tune in Week 3 |
+
+Do NOT implement FR-2.6 (scaffold split) or FR-1.2 (L1000 download) until OPEN-1 and OPEN-2 are resolved.
+
+---
+
+## Commands
+
+```bash
+# Setup & data
+make setup              # pip install -e ".[dev]" + download data
+make preprocess          # QC, normalize, split → data/processed/
+
+# Training & evaluation
+make train               # train default tri-modal config
+make evaluate            # evaluate best checkpoint
+
+# Code quality
+make test                # pytest with coverage
+make lint                # ruff check + black check
+
+# Scripts (direct)
+python scripts/download.py --source morphology|expression|metadata
+python scripts/preprocess.py
+python scripts/train.py model=bi_mol_morph training.batch_size=128 seed=42
+python scripts/evaluate.py --checkpoint checkpoints/best.pt --full
+python scripts/run_ablations.py --matrix core
+python scripts/summarize_ablations.py
+
+# Formatting
+ruff check src/ tests/ scripts/ --fix
+black src/ tests/ scripts/
+```
+
+---
+
+## Tech Stack
+
+**Using:**
+- Python 3.10+, PyTorch (training framework)
+- Hydra + OmegaConf (config management)
+- Weights & Biases (experiment tracking)
+- RDKit (SMILES → ECFP fingerprints)
+- pandas, numpy, scipy, scikit-learn (data processing)
+- pyarrow (parquet I/O)
+- pubchempy (SMILES lookup fallback)
+- umap-learn, matplotlib, seaborn (visualization)
+- pytest, ruff, black, pre-commit (dev tools)
+
+**NOT using (removed from v1):**
+- torch-geometric — no GNN encoders
+- scanpy — no single-cell analysis
+- gseapy — no gene set enrichment (P2 at best)
+- raw omegaconf — replaced by Hydra
+
+---
+
+## Repository Structure
+
+```
+CaPy-v2/
+├── CLAUDE.md                        # This file
+├── capy_v2_prd.md                   # Product requirements (authoritative)
+├── capy_v2_fsd.md                   # Functional spec (authoritative)
+├── pyproject.toml                   # Dependencies + tool config
+├── Makefile                         # CLI entry points
+├── .pre-commit-config.yaml          # Ruff, black, data blocker
+├── configs/
+│   ├── default.yaml                 # Top-level defaults
+│   ├── data/lincs.yaml              # Dataset URLs, paths, QC thresholds
+│   ├── model/
+│   │   ├── tri_modal.yaml           # T1: all 3 modalities
+│   │   ├── bi_mol_morph.yaml        # B4
+│   │   ├── bi_mol_expr.yaml         # B5
+│   │   └── bi_morph_expr.yaml       # B6
+│   ├── training/default.yaml        # Hyperparameters
+│   └── ablation/core.yaml           # 8-config × 5-seed matrix
+├── src/
+│   ├── data/
+│   │   ├── download.py              # FR-1: data download
+│   │   ├── audit.py                 # FR-1.4: data audit report
+│   │   ├── preprocess.py            # FR-2: QC, normalize, split
+│   │   ├── featurize.py             # FR-3: SMILES → ECFP
+│   │   └── dataset.py              # FR-4: CaPyDataset + DataLoader
+│   ├── models/
+│   │   ├── encoders.py              # FR-5.1–5.3: MLP encoders
+│   │   ├── projections.py           # FR-5.4: projection heads
+│   │   ├── capy.py                  # FR-5.5: model assembly
+│   │   └── losses.py               # FR-6: SigLIP + VICReg
+│   ├── training/
+│   │   └── trainer.py               # FR-7: train/val loop
+│   ├── evaluation/
+│   │   ├── retrieval.py             # FR-8.1: R@K, MRR
+│   │   ├── diagnostics.py           # FR-8.2: alignment/uniformity
+│   │   ├── clustering.py            # FR-8.3: MOA clustering
+│   │   └── report.py               # FR-8.4: full evaluation report
+│   └── utils/
+│       ├── config.py                # FR-10: Hydra utilities
+│       ├── logging.py               # FR-11: logger setup
+│       └── seeding.py               # FR-10.2: seed_everything()
+├── scripts/
+│   ├── download.py                  # make setup entry point
+│   ├── preprocess.py                # make preprocess entry point
+│   ├── train.py                     # make train entry point
+│   ├── evaluate.py                  # make evaluate entry point
+│   ├── run_ablations.py             # FR-9.1: ablation harness
+│   └── summarize_ablations.py       # FR-9.2: ablation summary
+├── tests/
+│   ├── test_data.py
+│   ├── test_models.py
+│   ├── test_losses.py
+│   ├── test_retrieval.py
+│   └── test_featurize.py
+├── data/
+│   ├── raw/{morphology,expression,metadata}/  # Downloaded (gitignored)
+│   ├── processed/                              # QC'd + normalized (gitignored)
+│   └── reports/                                # Data audit reports
+├── results/                         # Generated outputs (gitignored)
+└── checkpoints/                     # Model checkpoints (gitignored)
+```
+
+---
+
+## Architecture Summary
+
+### Encoders
+
+| Modality | Input | Architecture | Output |
+|----------|-------|-------------|--------|
+| Molecular | ECFP 2048-bit | MLP [2048→1024→1024→1024→512] + BN + ReLU + Dropout | 512-dim |
+| Morphology | ~1,500 CellProfiler features | MLP [~1500→1024→1024→512] + BN + ReLU + Dropout | 512-dim |
+| Expression | 978 L1000 landmark genes | MLP [978→1024→1024→512] + BN + ReLU + Dropout | 512-dim |
+| Projection | 512-dim encoder output | MLP [512→512→256] + L2-normalize | 256-dim (unit norm) |
+
+### Loss
+
+```
+L_total = SigLIP(mol,morph) + SigLIP(mol,expr) + SigLIP(morph,expr)
+        + λ · (VICReg(mol) + VICReg(morph) + VICReg(expr))
+```
+
+λ = 0.1 (default). For bi-modal configs, only relevant pairs are included.
+
+### Training Hyperparameters
+
+AdamW (weight_decay=1e-4), LR=1e-3, cosine annealing + 10-epoch warmup,
+batch_size=128–256, epochs=200, early_stopping patience=30 on val mean R@10,
+SCARF corruption=40%, gradient clip max_norm=1.0.
+
+---
+
+## Code Standards
+
+- **Formatter:** black (line-length 88)
+- **Linter:** ruff
+- **Tests:** pytest, target ≥80% coverage on src/
+- **Type hints:** required on all public functions
+- **Logging:** NEVER use `print()` — use `src/utils/logging.py` logger with format `{timestamp} | {module} | {level} | {message}`
+- **Seeding:** ALL random sources (Python, numpy, torch, CUDA) via `src/utils/seeding.py`
+- **Config:** ALL hyperparameters via Hydra config, never hardcode
+- **Embeddings:** always 256-dim, always L2-normalized in contrastive space
+
+---
+
+## Terminology
+
+Use these terms consistently (from FSD Section 2):
+
+| Term | Meaning |
+|------|---------|
+| Treatment | One compound at one dose in one cell line (atomic training unit) |
+| Compound | Unique chemical entity identified by InChIKey |
+| Modality | mol (molecular), morph (morphology), expr (expression) |
+| Profile | Numeric feature vector for one treatment in one modality |
+| Embedding | 256-dim L2-normalized vector from encoder + projection head |
+| Retrieval direction | Ordered pair e.g. mol→morph. 6 total directions |
+| Ablation config | One of B0–B6 or T1 in the 8-condition matrix |
+| Run | One training with specific config + seed. 40 runs in core matrix |
+
+---
+
+## Agent Workflow Guidance
+
+Before writing code for any feature:
+1. **Check FR:** Find the relevant functional requirement in `capy_v2_fsd.md` (FR-1 through FR-11). Follow the spec exactly.
+2. **Write test alongside:** Every module gets a corresponding test. Write tests that verify the "Verified when" clause from the FR.
+3. **Check non-goals:** Re-read NG1–NG9 above before starting. If your implementation touches a non-goal, stop.
+
+When debugging:
+- Check alignment/uniformity metrics first — collapse (uniformity > −0.5) is the most common failure mode.
+- Check per-modality loss components — asymmetric convergence is expected and not an error.
+- Check data shapes at module boundaries — mismatched feature dims are the second most common issue.
+
+Subagent patterns:
+- Data download: parallelize across 3 sources (morphology, expression, metadata)
+- Multi-seed training: parallelize across seeds for same config
+- Module implementation: parallelize independent modules (e.g., encoders + losses + evaluation)
+
+Use context7 MCP for up-to-date PyTorch, Hydra, and RDKit documentation.
+
+---
+
+## Current Phase
+
+**Phase 1 — Foundation** (Weeks 1–3)
+
+Gate: Bi-modal mol↔morph beats random baseline (R@10 > 15%)
+
+Current focus: Data audit + repo scaffold → Encoders + evaluation → First bi-modal baseline.

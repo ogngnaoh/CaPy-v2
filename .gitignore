@@ -1,0 +1,29 @@
+# Data
+data/raw/
+data/processed/
+
+# Outputs
+checkpoints/
+results/
+outputs/
+multirun/
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Environment
+.env
+.venv/
+venv/
+
+# Tools
+wandb/
+.ruff_cache/
+
+# OS
+.DS_Store
