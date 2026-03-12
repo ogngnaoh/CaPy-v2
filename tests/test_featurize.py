@@ -1,6 +1,10 @@
 """Tests for molecular featurization (FR-3.1)."""
 
-import pytest
+import logging
+
+import torch
+
+from src.data.featurize import smiles_to_ecfp
 
 
 class TestSMILESToECFP:
@@ -8,20 +12,53 @@ class TestSMILESToECFP:
 
     def test_valid_smiles_shape(self):
         """SMILES 'CCO' (ethanol) should produce tensor of shape [2048]."""
-        pytest.skip("Not yet implemented")
+        result = smiles_to_ecfp("CCO")
+        assert result.shape == (2048,)
 
     def test_valid_smiles_dtype(self):
         """Output should be float32."""
-        pytest.skip("Not yet implemented")
+        result = smiles_to_ecfp("CCO")
+        assert result.dtype == torch.float32
 
     def test_valid_smiles_nonzero_bits(self):
         """SMILES 'CCO' should have at least 3 nonzero bits."""
-        pytest.skip("Not yet implemented")
+        result = smiles_to_ecfp("CCO")
+        assert result.sum().item() >= 3
 
     def test_invalid_smiles_returns_none(self):
         """Invalid SMILES 'INVALID' should return None."""
-        pytest.skip("Not yet implemented")
+        result = smiles_to_ecfp("INVALID")
+        assert result is None
 
     def test_cxsmiles_stripping(self):
         """SMILES with CXSMILES annotation should be parsed after stripping."""
-        pytest.skip("Not yet implemented")
+        plain = smiles_to_ecfp("c1ccccc1")
+        cxsmiles = smiles_to_ecfp("c1ccccc1 |SomeAnnotation|")
+        assert plain is not None
+        assert cxsmiles is not None
+        assert torch.equal(plain, cxsmiles)
+
+    def test_empty_string_returns_none(self):
+        assert smiles_to_ecfp("") is None
+
+    def test_none_input_returns_none(self):
+        assert smiles_to_ecfp(None) is None
+
+    def test_custom_n_bits(self):
+        result = smiles_to_ecfp("CCO", n_bits=1024)
+        assert result.shape == (1024,)
+
+    def test_custom_radius(self):
+        r2 = smiles_to_ecfp("c1ccc(CC)cc1", radius=2)
+        r3 = smiles_to_ecfp("c1ccc(CC)cc1", radius=3)
+        assert not torch.equal(r2, r3)
+
+    def test_binary_values(self):
+        result = smiles_to_ecfp("CCO")
+        unique_vals = set(result.unique().tolist())
+        assert unique_vals.issubset({0.0, 1.0})
+
+    def test_warning_logged_for_invalid(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            smiles_to_ecfp("INVALID")
+        assert "Could not parse SMILES" in caplog.text
