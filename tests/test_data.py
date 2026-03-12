@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from omegaconf import OmegaConf
 
 from src.data.audit import (
@@ -226,27 +227,212 @@ class TestDataAudit:
         assert "Metadata" in content
 
 
-# ── Dataset stubs (existing) ───────────────────────────────────
+# ── Dataset tests (FR-4.1) ──────────────────────────────────
 
 
 class TestCaPyDataset:
     """Tests for CaPyDataset (FR-4.1)."""
 
-    def test_dataset_length_matches_parquet(self):
+    def test_dataset_length_matches_parquet(self, mock_dataset_parquet):
         """Dataset length should equal parquet row count minus failed SMILES."""
-        pytest.skip("Not yet implemented")
+        from src.data.dataset import CaPyDataset
 
-    def test_getitem_returns_correct_keys(self):
+        ds = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+        )
+        assert len(ds) == mock_dataset_parquet["n_valid_rows"]
+
+    def test_getitem_returns_correct_keys(self, mock_dataset_parquet):
         """Each item should have mol, morph, expr, metadata keys."""
-        pytest.skip("Not yet implemented")
+        from src.data.dataset import CaPyDataset
 
-    def test_tensor_shapes(self):
+        ds = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+        )
+        item = ds[0]
+        assert set(item.keys()) == {"mol", "morph", "expr", "metadata"}
+        assert isinstance(item["metadata"], dict)
+        assert "compound_id" in item["metadata"]
+        assert "smiles" in item["metadata"]
+        assert "moa" in item["metadata"]
+
+    def test_tensor_shapes(self, mock_dataset_parquet):
         """mol=[2048], morph=[morph_dim], expr=[expr_dim]."""
-        pytest.skip("Not yet implemented")
+        from src.data.dataset import CaPyDataset
 
-    def test_scarf_augmentation_training_only(self):
+        ds = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+        )
+        item = ds[0]
+        assert item["mol"].shape == (2048,)
+        assert item["morph"].shape == (mock_dataset_parquet["morph_dim"],)
+        assert item["expr"].shape == (mock_dataset_parquet["expr_dim"],)
+        assert item["mol"].dtype == torch.float32
+        assert item["morph"].dtype == torch.float32
+        assert item["expr"].dtype == torch.float32
+
+    def test_scarf_augmentation_training_only(self, mock_dataset_parquet):
         """SCARF should modify features during training, not eval."""
-        pytest.skip("Not yet implemented")
+        from src.data.dataset import CaPyDataset
+
+        ds_scarf = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+            scarf_enabled=True,
+            scarf_corruption_rate=0.5,
+        )
+        ds_clean = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+            scarf_enabled=False,
+        )
+        # SCARF produces stochastic results
+        torch.manual_seed(42)
+        scarf_morph_1 = ds_scarf[0]["morph"]
+        torch.manual_seed(123)
+        scarf_morph_2 = ds_scarf[0]["morph"]
+        clean_morph = ds_clean[0]["morph"]
+        assert not torch.equal(scarf_morph_1, scarf_morph_2)
+        assert clean_morph.shape == scarf_morph_1.shape
+
+    def test_failed_smiles_excluded_and_logged(self, mock_dataset_parquet, caplog):
+        """Failed SMILES are excluded and logged."""
+        import logging
+
+        from src.data.dataset import CaPyDataset
+
+        with caplog.at_level(logging.WARNING):
+            ds = CaPyDataset(
+                parquet_path=mock_dataset_parquet["parquet_path"],
+                feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+            )
+        assert len(ds) == mock_dataset_parquet["n_valid_rows"]
+        assert any(
+            "excluded" in msg.lower() or "failed" in msg.lower()
+            for msg in caplog.messages
+        )
+
+    def test_nan_filled_to_zero(self, mock_dataset_parquet):
+        """No NaN in any output tensor."""
+        from src.data.dataset import CaPyDataset
+
+        ds = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+        )
+        for i in range(len(ds)):
+            item = ds[i]
+            assert not torch.isnan(item["morph"]).any()
+            assert not torch.isnan(item["expr"]).any()
+            assert not torch.isnan(item["mol"]).any()
+
+    def test_scarf_does_not_corrupt_mol(self, mock_dataset_parquet):
+        """SCARF only corrupts morph/expr, not mol."""
+        from src.data.dataset import CaPyDataset
+
+        ds_scarf = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+            scarf_enabled=True,
+            scarf_corruption_rate=0.5,
+        )
+        ds_clean = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+            scarf_enabled=False,
+        )
+        assert torch.equal(ds_scarf[0]["mol"], ds_clean[0]["mol"])
+
+
+class TestCollate:
+    """Tests for collate_fn."""
+
+    def test_stacks_tensors(self, mock_dataset_parquet):
+        """collate_fn stacks mol/morph/expr into batch tensors."""
+        from src.data.dataset import CaPyDataset, collate_fn
+
+        ds = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+        )
+        batch = collate_fn([ds[0], ds[1]])
+        assert batch["mol"].shape == (2, 2048)
+        assert batch["morph"].shape == (2, mock_dataset_parquet["morph_dim"])
+        assert batch["expr"].shape == (2, mock_dataset_parquet["expr_dim"])
+
+    def test_collects_metadata(self, mock_dataset_parquet):
+        """Metadata collected as list of dicts."""
+        from src.data.dataset import CaPyDataset, collate_fn
+
+        ds = CaPyDataset(
+            parquet_path=mock_dataset_parquet["parquet_path"],
+            feature_columns_path=mock_dataset_parquet["feature_columns_path"],
+        )
+        batch = collate_fn([ds[0], ds[1]])
+        assert isinstance(batch["metadata"], list)
+        assert len(batch["metadata"]) == 2
+        assert "compound_id" in batch["metadata"][0]
+
+
+class TestBuildDataloaders:
+    """Tests for build_dataloaders (FR-4.2)."""
+
+    def test_returns_three_loaders(self, mock_split_parquets):
+        from src.data.dataset import build_dataloaders
+
+        result = build_dataloaders(mock_split_parquets["config"])
+        assert len(result) == 3
+
+    def test_train_loader_drops_last(self, mock_split_parquets):
+        from src.data.dataset import build_dataloaders
+
+        train_dl, _, _ = build_dataloaders(mock_split_parquets["config"])
+        ds_len = mock_split_parquets["train_len"]
+        batch_size = mock_split_parquets["batch_size"]
+        expected = ds_len // batch_size  # floor = drop_last
+        assert len(train_dl) == expected
+
+    def test_val_loader_keeps_last(self, mock_split_parquets):
+        import math
+
+        from src.data.dataset import build_dataloaders
+
+        _, val_dl, _ = build_dataloaders(mock_split_parquets["config"])
+        expected = math.ceil(
+            mock_split_parquets["val_len"] / mock_split_parquets["batch_size"]
+        )
+        assert len(val_dl) == expected
+
+    def test_train_loader_shuffles(self, mock_split_parquets):
+        from torch.utils.data import RandomSampler
+
+        from src.data.dataset import build_dataloaders
+
+        train_dl, _, _ = build_dataloaders(mock_split_parquets["config"])
+        assert isinstance(train_dl.sampler, RandomSampler)
+
+    def test_val_loader_no_shuffle(self, mock_split_parquets):
+        from torch.utils.data import SequentialSampler
+
+        from src.data.dataset import build_dataloaders
+
+        _, val_dl, _ = build_dataloaders(mock_split_parquets["config"])
+        assert isinstance(val_dl.sampler, SequentialSampler)
+
+    def test_batch_tensor_shapes(self, mock_split_parquets):
+        from src.data.dataset import build_dataloaders
+
+        train_dl, _, _ = build_dataloaders(mock_split_parquets["config"])
+        batch = next(iter(train_dl))
+        bs = mock_split_parquets["batch_size"]
+        assert batch["mol"].shape == (bs, 2048)
+        assert batch["morph"].shape[0] == bs
+        assert batch["expr"].shape[0] == bs
+        assert isinstance(batch["metadata"], list)
+        assert len(batch["metadata"]) == bs
 
 
 # ── Preprocessing: Data loaders (FR-2.0) ─────────────────────

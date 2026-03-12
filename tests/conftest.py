@@ -337,3 +337,155 @@ def mock_download_config(tmp_path):
             "chunk_size_bytes": 1024,
         },
     }
+
+
+@pytest.fixture
+def mock_dataset_parquet(tmp_path):
+    """Processed parquet + feature_columns.json for CaPyDataset tests.
+
+    20 rows, 5 morph features (Cells_*), 3 expr features (*_at).
+    Row 19 has invalid SMILES ('INVALID_SMILES') to test exclusion.
+    Row 18 has NaN in Cells_F0 to test NaN filling.
+    """
+    import json
+
+    np.random.seed(42)
+    n = 20
+    morph_features = [f"Cells_F{i}" for i in range(5)]
+    expr_features = [f"gene_{i}_at" for i in range(3)]
+
+    valid_smiles = [
+        "CCO",
+        "c1ccccc1",
+        "CC(=O)O",
+        "CCCC",
+        "CC(C)O",
+        "c1ccncc1",
+        "CC=O",
+        "CCCO",
+        "c1ccoc1",
+        "CC(=O)CC",
+        "CCCCO",
+        "c1ccsc1",
+        "CC(O)CC",
+        "CCCCC",
+        "CCN",
+        "c1ccc(O)cc1",
+        "CCCCCO",
+        "CC(N)C",
+        "c1ccc(N)cc1",
+    ]
+    smiles_col = valid_smiles + ["INVALID_SMILES"]
+
+    data = {
+        "compound_id": [f"BRD-K{i:08d}" for i in range(n)],
+        "smiles": smiles_col,
+        "moa": [f"moa_{i % 3}" if i < 15 else None for i in range(n)],
+    }
+    for feat in morph_features:
+        data[feat] = np.random.randn(n)
+    for feat in expr_features:
+        data[feat] = np.random.randn(n)
+
+    df = pd.DataFrame(data)
+    # NaN in one cell
+    df.loc[18, "Cells_F0"] = np.nan
+
+    parquet_path = tmp_path / "test_split.parquet"
+    df.to_parquet(parquet_path, index=False)
+
+    json_path = tmp_path / "feature_columns.json"
+    with open(json_path, "w") as f:
+        json.dump(
+            {"morph_features": morph_features, "expr_features": expr_features}, f
+        )
+
+    return {
+        "parquet_path": str(parquet_path),
+        "feature_columns_path": str(json_path),
+        "n_rows": n,
+        "n_valid_rows": 19,  # 1 invalid SMILES excluded
+        "morph_dim": 5,
+        "expr_dim": 3,
+    }
+
+
+@pytest.fixture
+def mock_split_parquets(tmp_path):
+    """Train/val/test parquets + config for build_dataloaders tests."""
+    import json
+
+    from omegaconf import OmegaConf
+
+    np.random.seed(42)
+    morph_features = [f"Cells_F{i}" for i in range(5)]
+    expr_features = [f"gene_{i}_at" for i in range(3)]
+
+    valid_smiles = [
+        "CCO",
+        "c1ccccc1",
+        "CC(=O)O",
+        "CCCC",
+        "CC(C)O",
+        "c1ccncc1",
+        "CC=O",
+        "CCCO",
+        "c1ccoc1",
+        "CC(=O)CC",
+        "CCCCO",
+        "c1ccsc1",
+        "CC(O)CC",
+        "CCCCC",
+        "CCN",
+        "c1ccc(O)cc1",
+        "CCCCCO",
+        "CC(N)C",
+    ]
+
+    splits = {"train": 16, "val": 6, "test": 6}
+    idx = 0
+    for split_name, n in splits.items():
+        data = {
+            "compound_id": [f"BRD-K{idx + i:08d}" for i in range(n)],
+            "smiles": [
+                valid_smiles[(idx + i) % len(valid_smiles)] for i in range(n)
+            ],
+            "moa": [f"moa_{i % 3}" for i in range(n)],
+        }
+        for feat in morph_features:
+            data[feat] = np.random.randn(n)
+        for feat in expr_features:
+            data[feat] = np.random.randn(n)
+        pd.DataFrame(data).to_parquet(
+            tmp_path / f"{split_name}.parquet", index=False
+        )
+        idx += n
+
+    json_path = tmp_path / "feature_columns.json"
+    with open(json_path, "w") as f:
+        json.dump(
+            {"morph_features": morph_features, "expr_features": expr_features}, f
+        )
+
+    config = OmegaConf.create(
+        {
+            "data": {
+                "output": {
+                    "processed_dir": str(tmp_path),
+                    "feature_columns_path": str(json_path),
+                }
+            },
+            "training": {
+                "batch_size": 4,
+                "num_workers": 0,
+                "scarf": {"enabled": False, "corruption_rate": 0.4},
+            },
+        }
+    )
+    return {
+        "config": config,
+        "train_len": 16,
+        "val_len": 6,
+        "test_len": 6,
+        "batch_size": 4,
+    }
