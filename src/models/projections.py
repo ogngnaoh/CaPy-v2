@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as f
 
 
 class ProjectionHead(nn.Module):
@@ -12,10 +12,21 @@ class ProjectionHead(nn.Module):
     Output: unit-norm vectors in the 256-dim contrastive space.
     """
 
-    def __init__(self, input_dim: int = 512, hidden_dim: int = 512, output_dim: int = 256) -> None:
+    def __init__(
+        self,
+        input_dim: int = 512,
+        hidden_dim: int = 512,
+        output_dim: int = 256,
+    ) -> None:
         super().__init__()
-        raise NotImplementedError
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Project and L2-normalize. Output shape: [batch_size, output_dim]."""
-        raise NotImplementedError
+        x = self.net(x)
+        return f.normalize(x, p=2, dim=-1)

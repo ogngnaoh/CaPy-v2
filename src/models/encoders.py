@@ -4,48 +4,97 @@ import torch
 import torch.nn as nn
 
 
+class _MLPEncoder(nn.Module):
+    """Generic MLP encoder: [input] → (Linear→BN→ReLU→Dropout)×N → Linear → [output]."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: list[int],
+        output_dim: int,
+        dropout: float,
+    ) -> None:
+        super().__init__()
+        layers: list[nn.Module] = []
+        prev_dim = input_dim
+        for h_dim in hidden_dims:
+            layers.extend(
+                [
+                    nn.Linear(prev_dim, h_dim),
+                    nn.BatchNorm1d(h_dim),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                ]
+            )
+            prev_dim = h_dim
+        layers.append(nn.Linear(prev_dim, output_dim))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
 class MolecularEncoder(nn.Module):
     """ECFP → 512-dim encoder (FR-5.3).
 
-    Architecture: Linear(2048→1024) → BN → ReLU → Dropout
-                  → Linear(1024→1024) → BN → ReLU → Dropout
-                  → Linear(1024→1024) → BN → ReLU → Dropout
-                  → Linear(1024→512)
+    Architecture: [2048→1024→1024→1024→512] with BN, ReLU, Dropout.
     """
 
-    def __init__(self, input_dim: int = 2048, output_dim: int = 512, dropout: float = 0.1) -> None:
+    def __init__(
+        self,
+        input_dim: int = 2048,
+        output_dim: int = 512,
+        dropout: float = 0.1,
+        hidden_dims: list[int] | None = None,
+    ) -> None:
         super().__init__()
-        raise NotImplementedError
+        if hidden_dims is None:
+            hidden_dims = [1024, 1024, 1024]
+        self.net = _MLPEncoder(input_dim, hidden_dims, output_dim, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        return self.net(x)
 
 
 class MorphologyEncoder(nn.Module):
     """CellProfiler features → 512-dim encoder (FR-5.1).
 
-    Architecture: Linear(morph_dim→1024) → BN → ReLU → Dropout
-                  → Linear(1024→1024) → BN → ReLU → Dropout
-                  → Linear(1024→512)
+    Architecture: [~1500→1024→1024→512] with BN, ReLU, Dropout.
     """
 
-    def __init__(self, input_dim: int = 1500, output_dim: int = 512, dropout: float = 0.1) -> None:
+    def __init__(
+        self,
+        input_dim: int = 1500,
+        output_dim: int = 512,
+        dropout: float = 0.1,
+        hidden_dims: list[int] | None = None,
+    ) -> None:
         super().__init__()
-        raise NotImplementedError
+        if hidden_dims is None:
+            hidden_dims = [1024, 1024]
+        self.net = _MLPEncoder(input_dim, hidden_dims, output_dim, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        return self.net(x)
 
 
 class ExpressionEncoder(nn.Module):
     """L1000 landmark genes → 512-dim encoder (FR-5.2).
 
-    Architecture: identical to MorphologyEncoder with different input_dim.
+    Architecture: [978→1024→1024→512] with BN, ReLU, Dropout.
     """
 
-    def __init__(self, input_dim: int = 978, output_dim: int = 512, dropout: float = 0.1) -> None:
+    def __init__(
+        self,
+        input_dim: int = 978,
+        output_dim: int = 512,
+        dropout: float = 0.1,
+        hidden_dims: list[int] | None = None,
+    ) -> None:
         super().__init__()
-        raise NotImplementedError
+        if hidden_dims is None:
+            hidden_dims = [1024, 1024]
+        self.net = _MLPEncoder(input_dim, hidden_dims, output_dim, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        return self.net(x)
