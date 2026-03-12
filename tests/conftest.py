@@ -175,16 +175,41 @@ def mock_matched_df():
     100 rows, 15 morph features (Cells_*), 10 expr features (*_at),
     plus compound_id, smiles, moa, split (unset).
     Edge cases: one zero-variance morph feature, one >5% NaN feature,
-    one exactly-5% NaN feature, 3 all-NaN rows.
+    one under-threshold NaN feature, 3 all-NaN rows.
+    Uses ring-containing SMILES for diverse Murcko scaffolds.
     """
     np.random.seed(42)
     n = 100
     n_morph = 15
     n_expr = 10
 
+    # Ring-containing SMILES with diverse scaffolds for meaningful splitting
+    scaffold_smiles = [
+        "c1ccccc1",  # benzene
+        "c1ccncc1",  # pyridine
+        "c1ccoc1",  # furan
+        "c1ccsc1",  # thiophene
+        "c1cc2ccccc2cc1",  # naphthalene
+        "c1ccc2[nH]ccc2c1",  # indole
+        "C1CCCCC1",  # cyclohexane
+        "C1CCNCC1",  # piperidine
+        "c1ccc(-c2ccccc2)cc1",  # biphenyl
+        "c1cnc2ccccc2n1",  # quinazoline
+        "c1ccc2ncccc2c1",  # quinoline
+        "c1ccc2c(c1)ccc1ccccc12",  # phenanthrene
+        "C1CCC2(CC1)CCCC2",  # spiro[4.5]decane
+        "c1ccc(-c2ccccn2)cc1",  # 2-phenylpyridine
+        "c1ccc2[nH]ncc2c1",  # indazole
+        "c1ccc2occc2c1",  # benzofuran
+        "c1ccc2sccc2c1",  # benzothiophene
+        "C1CC2CCCC(C1)C2",  # norbornane
+        "c1ccc(-c2ccco2)cc1",  # 2-phenylfuran
+        "c1ccc2c(c1)CCCC2",  # tetrahydronaphthalene
+    ]
+
     data = {
         "compound_id": [f"BRD-K{i:08d}" for i in range(n)],
-        "smiles": [f"C{'C' * (i % 10)}O" for i in range(n)],
+        "smiles": [scaffold_smiles[i % len(scaffold_smiles)] for i in range(n)],
         "moa": [f"moa_{i % 5}" if i < 80 else None for i in range(n)],
     }
 
@@ -206,8 +231,9 @@ def mock_matched_df():
     # Edge case 2: >5% NaN feature (6 out of 100 = 6%)
     df.loc[0:5, "Cells_Feature_1"] = np.nan
 
-    # Edge case 3: exactly 5% NaN feature (5 out of 100 = 5%)
-    df.loc[0:4, "Cells_Feature_2"] = np.nan
+    # Edge case 3: under-threshold NaN feature (4 out of 97 after dropping
+    # all-NaN rows ≈ 4.1%, under 5% threshold → kept)
+    df.loc[0:3, "Cells_Feature_2"] = np.nan
 
     # Edge case 4: 3 all-NaN rows (rows 97, 98, 99)
     morph_cols = [c for c in df.columns if c.startswith("Cells_")]

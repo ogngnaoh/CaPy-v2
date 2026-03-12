@@ -70,6 +70,8 @@ processing:
   min_replicates: 2
   replicate_null_samples: 10000
   replicate_null_percentile: 90
+  pubchem_fallback: false  # Stage 3 SMILES fallback via PubChem API
+  seed: 42
 
 split:
   train: 0.70
