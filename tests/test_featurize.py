@@ -4,7 +4,7 @@ import logging
 
 import torch
 
-from src.data.featurize import smiles_to_ecfp
+from src.data.featurize import featurize_smiles_batch, smiles_to_ecfp
 
 
 class TestSMILESToECFP:
@@ -62,3 +62,30 @@ class TestSMILESToECFP:
         with caplog.at_level(logging.WARNING):
             smiles_to_ecfp("INVALID")
         assert "Could not parse SMILES" in caplog.text
+
+
+class TestFeaturizeSMILESBatch:
+    """Tests for featurize_smiles_batch."""
+
+    def test_returns_dict(self):
+        """Returns dict mapping SMILES to tensor."""
+        result = featurize_smiles_batch(["CCO", "c1ccccc1"])
+        assert isinstance(result, dict)
+        assert len(result) == 2
+
+    def test_deduplication(self):
+        """Duplicate SMILES are featurized only once."""
+        result = featurize_smiles_batch(["CCO", "CCO", "c1ccccc1"])
+        assert len(result) == 2
+
+    def test_invalid_excluded(self):
+        """Invalid SMILES not in result dict."""
+        result = featurize_smiles_batch(["CCO", "INVALID"])
+        assert "CCO" in result
+        assert "INVALID" not in result
+
+    def test_logs_summary(self, caplog):
+        """Logs featurization summary per FSD spec."""
+        with caplog.at_level(logging.INFO):
+            featurize_smiles_batch(["CCO", "INVALID", "c1ccccc1"])
+        assert "Featurized 2/3 compounds (1 failed)" in caplog.text

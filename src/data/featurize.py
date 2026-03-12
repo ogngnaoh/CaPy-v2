@@ -50,3 +50,40 @@ def smiles_to_ecfp(
     gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits)
     fp = gen.GetFingerprintAsNumPy(mol)
     return torch.tensor(fp, dtype=torch.float32)
+
+
+def featurize_smiles_batch(
+    smiles_list: list[str],
+    n_bits: int = 2048,
+    radius: int = 2,
+) -> dict[str, torch.Tensor]:
+    """Featurize a list of SMILES strings to ECFP fingerprints.
+
+    Deduplicates SMILES before featurization. Logs a summary of
+    successful and failed conversions per FSD spec.
+
+    Args:
+        smiles_list: List of SMILES strings.
+        n_bits: Number of bits in the fingerprint (default: 2048).
+        radius: Morgan fingerprint radius (default: 2).
+
+    Returns:
+        Dict mapping each successfully parsed SMILES to its float32 tensor.
+    """
+    unique_smiles = list(set(smiles_list))
+    results: dict[str, torch.Tensor] = {}
+    failed = 0
+    for smi in unique_smiles:
+        fp = smiles_to_ecfp(smi, n_bits=n_bits, radius=radius)
+        if fp is not None:
+            results[smi] = fp
+        else:
+            failed += 1
+    total = len(unique_smiles)
+    logger.info(
+        "Featurized %d/%d compounds (%d failed)",
+        total - failed,
+        total,
+        failed,
+    )
+    return results
