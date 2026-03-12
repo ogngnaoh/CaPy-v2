@@ -6,9 +6,15 @@ Usage:
 """
 
 import argparse
+import sys
 
-from src.data.download import download_all, download_expression, download_metadata, download_morphology
 from src.data.audit import run_audit
+from src.data.download import (
+    download_all,
+    download_expression,
+    download_metadata,
+    download_morphology,
+)
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -36,9 +42,20 @@ def main():
     args = parser.parse_args()
 
     if args.source:
-        DOWNLOADERS[args.source]()
+        try:
+            DOWNLOADERS[args.source]()
+        except Exception as exc:
+            logger.error("Download failed for %s: %s", args.source, exc)
+            sys.exit(1)
     else:
-        download_all()
+        errors = download_all()
+        if errors:
+            logger.error(
+                "Download completed with %d error(s):\n  %s",
+                len(errors),
+                "\n  ".join(errors),
+            )
+            sys.exit(1)
 
     if not args.skip_audit:
         run_audit()

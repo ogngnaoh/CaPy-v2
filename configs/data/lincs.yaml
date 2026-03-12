@@ -3,14 +3,66 @@ name: lincs
 
 sources:
   morphology:
-    url: "s3://cellpainting-gallery/cpg0004-lincs/"
+    # Pre-aggregated consensus MODZ profiles from lincs-cell-painting repo (Git LFS).
+    # These are treatment-level profiles already aggregated via MODZ — no per-plate
+    # processing needed. We download full-feature (not feature-selected) versions
+    # because we do our own feature QC per FR-2.5.
+    # The S3 bucket (cellpainting-gallery) has per-plate profiles (2.65 GB, 1620 files)
+    # which is overkill — the consensus files are ~145 MB total.
+    files:
+      batch1_modz:
+        url: "https://media.githubusercontent.com/media/broadinstitute/lincs-cell-painting/master/consensus/2016_04_01_a549_48hr_batch1/2016_04_01_a549_48hr_batch1_consensus_modz.csv.gz"
+        filename: "2016_04_01_a549_48hr_batch1_consensus_modz.csv.gz"
+        expected_size_mb: 66
+      batch2_modz:
+        url: "https://media.githubusercontent.com/media/broadinstitute/lincs-cell-painting/master/consensus/2017_12_05_Batch2/2017_12_05_Batch2_consensus_modz.csv.gz"
+        filename: "2017_12_05_Batch2_consensus_modz.csv.gz"
+        expected_size_mb: 78
     local_path: "data/raw/morphology/"
+    verification:
+      min_rows: 15000
+      min_columns: 500
+
   expression:
-    url: "https://figshare.com/ndownloader/articles/13181966/versions/2"
+    # L1000 Level 5 (treatment-level MODZ aggregated) — OPEN-2 resolved.
+    # Level 4 kept as optional backup for future augmentation experiments.
     local_path: "data/raw/expression/"
+    files:
+      level_5:
+        url: "https://ndownloader.figshare.com/files/25370549"
+        filename: "level_5_modz_n9482x978.gctx"
+        primary: true  # This is what we use
+      col_meta_level_5:
+        url: "https://ndownloader.figshare.com/files/25370519"
+        filename: "col_meta_level_5_REP.A_A549_only_n9482.txt"
+        primary: true
+      pert_info:
+        url: "https://ndownloader.figshare.com/files/25370555"
+        filename: "REP.A_A549_pert_info.txt"
+        primary: true
+      level_4:
+        url: "https://ndownloader.figshare.com/files/25370525"
+        filename: "level_4_zspc_n27837x978.gctx"
+        primary: false  # Optional backup, not downloaded by default
+      col_meta_level_4:
+        url: "https://ndownloader.figshare.com/files/25370513"
+        filename: "col_meta_level_3_REP.A_A549_only_n27837.txt"
+        primary: false
+    verification:
+      min_rows: 5000
+      min_columns: 978
+
   metadata:
-    url: "https://s3.amazonaws.com/data.clue.io/repurposing/downloads/repurposing_samples_20200324.txt"
+    primary_url: "https://s3.amazonaws.com/data.clue.io/repurposing/downloads/repurposing_samples_20200324.txt"
     local_path: "data/raw/metadata/repurposing_samples.txt"
+    verification:
+      min_rows: 5000
+      required_columns: ["broad_id", "smiles"]
+
+download:
+  retries: 3
+  timeout_seconds: 30
+  chunk_size_bytes: 8192
 
 processing:
   nan_threshold: 0.05
