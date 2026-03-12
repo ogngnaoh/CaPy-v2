@@ -7,5 +7,13 @@
       "Bash(ruff *)",
       "Bash(black *)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "ruff check --fix \"$TOOL_INPUT_file_path\" 2>/dev/null; ruff format \"$TOOL_INPUT_file_path\" 2>/dev/null; true"
+      }
+    ]
   }
 }

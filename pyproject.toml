@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "capy-v2"
@@ -26,6 +26,8 @@ dependencies = [
     "umap-learn>=0.5",
     "matplotlib>=3.7",
     "seaborn>=0.13",
+    "requests>=2.31",
+    "cmapPy>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -56,3 +58,4 @@ target-version = ["py310"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = ["integration: marks tests requiring network (deselect with '-m not integration')"]

@@ -1,17 +1,19 @@
+PYTHON ?= python3
+
 .PHONY: setup preprocess train evaluate test lint
 
 setup:
-	pip install -e ".[dev]"
-	python scripts/download.py
+	$(PYTHON) -m pip install -e ".[dev]"
+	$(PYTHON) scripts/download.py
 
 preprocess:
-	python scripts/preprocess.py
+	$(PYTHON) scripts/preprocess.py
 
 train:
-	python scripts/train.py
+	$(PYTHON) scripts/train.py
 
 evaluate:
-	python scripts/evaluate.py
+	$(PYTHON) scripts/evaluate.py
 
 test:
 	pytest tests/ --cov=src --cov-report=term -v
