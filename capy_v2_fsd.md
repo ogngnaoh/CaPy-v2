@@ -50,7 +50,7 @@ CaPy v2 is a Python command-line research framework that trains contrastive mode
 
 ### 3.1 Scenario: Hoang runs the full pipeline for the first time
 
-Hoang clones the repo on a machine with a single A100 GPU. He runs:
+Hoang opens the repo in Google Colab with an H100 GPU runtime. He runs:
 
 ```
 make setup          # installs deps, downloads data
@@ -65,7 +65,7 @@ make evaluate       # runs full evaluation suite on best checkpoint
 
 **Unhappy path 2 — data audit reveals too few treatments:** `make preprocess` runs the data audit and finds only 2,100 treatments survive QC (below the 5,000 target). The system prints "WARNING: Only 2,100 treatments survived QC (target: ≥5,000). Check data/reports/lincs_audit.md for details. Proceeding with available data." Training continues but logs a persistent warning.
 
-**Unhappy path 3 — GPU out of memory:** `make train` crashes with CUDA OOM at batch_size=256. The system prints the standard PyTorch OOM message. Hoang edits `configs/default.yaml` to set `training.batch_size: 128` and reruns. No data reprocessing is needed.
+**Unhappy path 3 — GPU out of memory:** `make train` crashes with CUDA OOM at batch_size=256. The system prints the standard PyTorch OOM message. Hoang edits `configs/default.yaml` to set `training.batch_size: 128` and reruns. No data reprocessing is needed. (Note: unlikely on Colab H100 with 80 GB HBM3, but handled for portability.)
 
 ### 3.2 Scenario: Hoang runs the full ablation matrix
 
@@ -97,23 +97,28 @@ The system produces per-direction retrieval tables, alignment/uniformity metrics
 
 **FR-1.1: Cell Painting profile download**
 Trigger: User runs `python scripts/download.py --source morphology` or `make setup`.
-Input: None (URL is hardcoded in config).
+Input: None (URLs in `configs/data/lincs.yaml`).
 Behavior:
-- The system SHALL attempt to download from `s3://cellpainting-gallery/cpg0004-lincs/` using `aws s3 cp --no-sign-request`.
-- IF the `aws` CLI is not available, the system SHALL fall back to HTTPS download from the equivalent S3 URL.
-- IF the file already exists at the target path AND its size matches the expected size, the system SHALL skip the download and print "Morphology profiles already downloaded. Skipping."
-- The system SHALL save the file to `data/raw/morphology/` and print the file size and row count after download.
-- IF download fails after 3 retries (30s timeout each), the system SHALL print "ERROR: Failed to download morphology profiles. URL: [url]. Retry manually." and exit with code 1.
-Verified when: `data/raw/morphology/` contains a gzipped CSV with ≥15,000 rows and ≥500 columns.
+- The system SHALL download pre-aggregated consensus MODZ profiles from the `broadinstitute/lincs-cell-painting` GitHub repository (Git LFS) via HTTPS.
+- Two files are downloaded: Batch 1 (`2016_04_01_a549_48hr_batch1_consensus_modz.csv.gz`, ~66 MB) and Batch 2 (`2017_12_05_Batch2_consensus_modz.csv.gz`, ~78 MB). Total ~145 MB.
+- These are treatment-level profiles already aggregated via MODZ with full CellProfiler features (~1,500 columns before QC).
+- NOTE: The raw S3 bucket (`s3://cellpainting-gallery/cpg0004-lincs/broad/workspace/profiles/`) contains per-plate profiles (270 plates × 6 variants = 1,620 files, 2.65 GB). We do NOT download those — the consensus files are what we need.
+- IF a file already exists at the target path, the system SHALL skip that file and print "Skipping [filename] — already exists."
+- The system SHALL save files to `data/raw/morphology/` and log the file count after download.
+- IF download fails after 3 retries (30s timeout each), the system SHALL log an error and exit with code 1.
+Verified when: `data/raw/morphology/` contains 2 gzipped CSV files with combined ≥15,000 rows and ≥500 feature columns.
+**Validated 2026-03-11:** Batch 1 = 10,752 rows × 1,781 features (+ 9 metadata cols). Batch 2 = 10,368 rows × 2,198 features (+ 9 metadata cols). Combined = 21,120 rows, 1,848 unique compounds. Note: feature column counts differ between batches — FR-2.5 must intersect features before QC.
 
 **FR-1.2: L1000 expression profile download**
 Trigger: User runs `python scripts/download.py --source expression` or `make setup`.
-Input: None (URL is hardcoded in config).
+Input: None (URLs in `configs/data/lincs.yaml`).
 Behavior:
-- The system SHALL download from the Figshare URL specified in `configs/data/default.yaml`.
+- The system SHALL download Level 5 (treatment-level MODZ aggregated) profiles from Figshare. Level 4 (replicate-level) is NOT downloaded by default (OPEN-2 resolved: Level 5 chosen for better SNR).
+- Three primary files: the Level 5 GCTX data file, its column metadata, and perturbation info.
 - Same retry, skip, and error behavior as FR-1.1.
 - The system SHALL save to `data/raw/expression/`.
-Verified when: `data/raw/expression/` contains a file with ≥5,000 rows and ≥978 columns.
+Verified when: `data/raw/expression/` contains the Level 5 GCTX file with ≥5,000 rows and 978 columns.
+**Validated 2026-03-11:** Level 5 col_meta has 9,482 rows (8,982 treatments + 500 DMSO controls), 1,402 unique compounds, 7 dose levels (0.04–20 µM). GCTX readable via cmapPy or h5py. Column `pert_id` uses truncated 13-char BRD format. Column `x_smiles` provides SMILES for all treatments.
 
 **FR-1.3: Compound metadata download**
 Trigger: User runs `python scripts/download.py --source metadata` or `make setup`.
@@ -122,6 +127,7 @@ Behavior:
 - The system SHALL download the Drug Repurposing Hub samples file from `s3.amazonaws.com/data.clue.io/repurposing/downloads/repurposing_samples_20200324.txt`.
 - The system SHALL save to `data/raw/metadata/repurposing_samples.txt`.
 Verified when: File contains ≥5,000 rows with columns including `broad_id` and `smiles`.
+**Validated 2026-03-11:** 13,553 rows, 6,806 unique compounds (by truncated BRD), 100% SMILES coverage, has InChIKey and pubchem_cid. NOTE: This file has NO MOA column — MOA comes from L1000 `pert_info.txt` (990/1,125 tri-modal compounds have MOA, 88%) and morphology `Metadata_moa` column.
 
 **FR-1.4: Data audit**
 Trigger: Runs automatically after all downloads complete, OR manually via `python scripts/audit.py`.
@@ -135,6 +141,7 @@ Behavior:
 - The system SHALL print a one-line summary: "Data audit complete: [N] treatments with paired morph+expr profiles. Report: data/reports/lincs_audit.md"
 - IF paired treatment count < 5,000, the system SHALL print "WARNING: Only [N] paired treatments found (target: ≥5,000)."
 Verified when: `data/reports/lincs_audit.md` exists and contains all five sections listed above.
+**Validated 2026-03-11:** Cross-modal overlap = 1,402 compounds (morph ∩ expr), 1,125 compounds (all three modalities with SMILES). Target ≥5,000 paired treatments is met. ID matching requires truncating morph `Metadata_broad_sample` (22-char) to 13 chars to match expr `pert_id` (13-char).
 
 ---
 
@@ -159,17 +166,21 @@ Behavior:
 - The system SHALL aggregate replicates to treatment-level using MODZ (moderated z-score) aggregation: weight each replicate by its mean Spearman correlation with other replicates of the same treatment.
 - IF a treatment has only 1 replicate, the system SHALL use that replicate directly (weight = 1.0).
 - The system SHALL log: "Aggregation: [N] replicates → [M] treatments (method=MODZ)."
+- **NOTE (2026-03-11):** The consensus MODZ morphology profiles are already aggregated at the treatment level. FR-2.1 and FR-2.2 apply only to L1000 if using Level 4 data. With Level 5 (resolved), both modalities arrive pre-aggregated. These steps become pass-through but are retained for pipeline completeness and future Level 4 experiments.
 Verified when: Output has exactly one row per unique treatment identifier. No duplicate treatment IDs exist.
 
 **FR-2.3: Treatment matching across modalities**
 Trigger: After aggregation of both morphology and expression.
 Input: Treatment-level morphology profiles, treatment-level expression profiles, compound metadata.
 Behavior:
-- The system SHALL match treatments across morphology and expression tables using the treatment-level identifier (compound + dose).
-- The system SHALL match compounds to SMILES using a three-stage fallback: (1) full BRD ID match against Repurposing Hub, (2) truncated BRD (first 13 chars) match, (3) compound name → PubChem CID → SMILES lookup via `pubchempy`.
+- The system SHALL normalize all BRD identifiers to truncated 13-char format (e.g., `BRD-K76022557-003-28-9` → `BRD-K76022557`) before matching. Morphology uses full 22-char BRD IDs (`Metadata_broad_sample`); expression uses 13-char (`pert_id`).
+- The system SHALL match treatments across morphology and expression tables using the normalized compound ID + dose.
+- The system SHALL match compounds to SMILES using a three-stage fallback: (1) truncated BRD match against Repurposing Hub `broad_id`, (2) match against L1000 `x_smiles` column from col_meta, (3) compound name → PubChem CID → SMILES lookup via `pubchempy`.
+- The system SHALL source MOA annotations from L1000 `pert_info.txt` (`moa` column, 88% coverage) and morphology `Metadata_moa` column (union). The Drug Repurposing Hub does NOT contain MOA.
 - The system SHALL remove treatments where ANY of the three modalities (morph, expr, SMILES) is missing.
-- The system SHALL log: "Matched: [N] treatments with all 3 modalities. SMILES coverage: [X]/[Y] via BRD, [Z] via truncated BRD, [W] via PubChem."
+- The system SHALL log: "Matched: [N] treatments with all 3 modalities. SMILES coverage: [X]/[Y] via BRD, [Z] via x_smiles, [W] via PubChem. MOA coverage: [A]/[N]."
 Verified when: Every row in the output has non-null values for morph features, expr features, and a valid SMILES string parseable by RDKit.
+**Validated 2026-03-11:** Expected ~1,125 compounds (tri-modal with SMILES). ID truncation verified: morph 22-char → 13-char matches expr `pert_id`. SMILES available from both Repurposing Hub (100% of 6,806 compounds) and L1000 `x_smiles` (all 9,482 treatments). MOA from `pert_info.txt` covers 990/1,125 (88%).
 
 **FR-2.4: Control removal**
 Trigger: After matching.
@@ -183,6 +194,7 @@ Verified when: No remaining treatments have DMSO/vehicle identifiers.
 Trigger: After control removal.
 Input: Active treatment table with feature columns.
 Behavior:
+- **Feature intersection (morphology only):** Batch 1 has 1,781 CellProfiler features, Batch 2 has 2,198. The system SHALL compute the intersection of feature column names across all morphology files and retain ONLY the shared columns. The system SHALL log: "Feature intersection: [X] shared morph features from [N] files (Batch 1: [A], Batch 2: [B])."
 - The system SHALL replace all `inf` and `-inf` values with `NaN`.
 - The system SHALL identify morphology feature columns using CellProfiler naming prefixes: `Cells_`, `Cytoplasm_`, `Nuclei_`.
 - The system SHALL identify expression feature columns using probe ID suffix: `_at`.
@@ -191,6 +203,7 @@ Behavior:
 - The system SHALL log: "Feature QC: morph [X] → [Y], expr [A] → [B]. Removed [Z] features total."
 - The system SHALL save the list of retained feature column names to `data/processed/feature_columns.json`.
 Verified when: Output contains no `inf` values, no features with >5% NaN, and `feature_columns.json` exists.
+**Validated 2026-03-11:** Batch 1 has 1,781 features, Batch 2 has 2,198 features. Intersection required before downstream QC. Expression is fixed at 978 landmark genes (no intersection needed).
 
 **FR-2.6: Scaffold splitting**
 Trigger: After feature QC.
@@ -580,8 +593,8 @@ Verified when: Running with `--quiet` suppresses INFO messages. Running with `--
 
 | Constraint | Specification | Rationale |
 |-----------|--------------|-----------|
-| Single training run time | SHALL complete in ≤60 minutes on a single V100/A100 GPU | 40-run matrix must finish in ~1 day |
-| Peak GPU memory | SHALL not exceed 16 GB for batch_size=128 | Compatible with T4 (16GB), V100 (32GB), A100 (40/80GB) |
+| Single training run time | SHALL complete in ≤30 minutes on a Google Colab H100 GPU | 40-run matrix must finish in ~1 day |
+| Peak GPU memory | SHALL not exceed 16 GB for batch_size=128 | Compatible with Colab H100 (80 GB HBM3); constraint kept conservative for portability to T4/V100 |
 | Data download | SHALL complete in ≤30 minutes on a 100 Mbps connection | ~350 MB total download |
 | Reproducibility | Two identical runs SHALL produce identical val metrics (±1e-5) | Scientific rigor requirement |
 | Code quality | `ruff check src/` SHALL produce 0 errors; `black --check src/` SHALL pass | Engineering standard |
@@ -609,12 +622,7 @@ These items are explicitly excluded. AI agents and developers SHALL NOT implemen
 
 ### 8.1 Open issues
 
-| ID | Issue | Owner | Due | Status |
-|----|-------|-------|-----|--------|
-| OPEN-1 | Should dose be treated as augmentation (SupCon: all doses of same compound are positive pairs) or as independent treatments (each dose is a separate treatment)? Decision affects effective N (1,327 vs 7,900). | Hoang | Week 1 | **BLOCKING** — resolve before FR-2.6 implementation |
-| OPEN-2 | Should L1000 use Level 4 (replicate-level, more samples, noisier) or Level 5 (treatment-level, fewer samples, cleaner)? | Hoang | Week 1 | **BLOCKING** — resolve before FR-1.2 implementation |
-| OPEN-3 | What is the optimal SCARF corruption rate for Cell Painting features? Literature suggests 30–60% for generic tabular data. | Hoang | Week 3 | Non-blocking — default to 40%, tune later |
-| OPEN-4 | Can InfoAlign's pretrained model be loaded and evaluated on CaPy's retrieval protocol (FR-8.1) for direct comparison? Need to verify checkpoint format compatibility. | Hoang | Week 4 | Non-blocking — P2 feature |
+All issues resolved as of 2026-03-11. See Decision Log below.
 
 ### 8.2 Decision log
 
@@ -625,6 +633,10 @@ These items are explicitly excluded. AI agents and developers SHALL NOT implemen
 | 2026-03-10 | Add VICReg regularization | Hoang | CaPy v1 showed encoder collapse. VICReg variance term directly prevents this by maintaining embedding std > 1. |
 | 2026-03-10 | Use LINCS (A549) instead of CDRP-bio (U2OS) | Hoang | Rosetta paper shows LINCS has markedly better modality alignment. 15× more data after QC. Single cell line avoids confounding. |
 | 2026-03-10 | Scaffold split grouped by compound (all doses in same split) | Hoang | Prevents data leakage from structurally similar molecules across splits. Different doses of the same compound would leak molecular identity. |
+| 2026-03-11 | OPEN-1: Dose as augmentation with quality filtering | Hoang | SupCon-style positive pairing across doses, but only treatments passing replicate-correlation filter (90th percentile DMSO null). Effective N ~3,000–5,000. Excludes near-DMSO and cytotoxic profiles. |
+| 2026-03-11 | OPEN-2: L1000 Level 5 (treatment-level) | Hoang | Better SNR via MODZ aggregation. Level 4 replicates are not independent. Contrastive framework needs 1:1:1 treatment pairing. Level 4 downloaded as optional backup. |
+| 2026-03-11 | OPEN-3: SCARF 40% default, sweep 20/40/60% in Week 2 | Hoang | Cell Painting features highly correlated — higher corruption tolerable. Quick sweep on morph↔expr (1 seed each) to validate. |
+| 2026-03-11 | OPEN-4: InfoAlign comparison deferred to P2 | Hoang | Asymmetric architecture (2/6 directions), different cell line (U2OS vs A549). Frame as out-of-distribution evaluation if included. |
 
 ---
 

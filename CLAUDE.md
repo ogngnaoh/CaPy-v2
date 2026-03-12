@@ -9,6 +9,7 @@ tests whether tri-modal alignment outperforms any bi-modal pair.
 
 Full specifications: `capy_v2_prd.md` (requirements) and `capy_v2_fsd.md` (functional spec).
 These two documents are the authoritative source of truth for all requirements.
+They can be updated when the user requests changes — they are not read-only.
 
 ---
 
@@ -36,26 +37,33 @@ Before implementing anything, check this list. These are **permanent non-goals**
 | Contrastive loss | SigLIP pairwise | InfoNCE (batch-size limited with log K bound) | SigLIP is batch-size agnostic |
 | Regularization | VICReg (variance + covariance) | None (v1 had encoder collapse) | Variance term directly prevents collapse |
 | Dataset | LINCS cpg0004 (A549) | CDRP-bio (U2OS, 15× less data) | Better cross-modality alignment per Rosetta paper |
+| Morphology source | Consensus MODZ profiles from lincs-cell-painting repo (Git LFS, ~145 MB) | Per-plate S3 profiles (2.65 GB, 1620 files) | Pre-aggregated, treatment-level, full features for our own QC |
+| L1000 level | Level 5 (treatment-level MODZ) | Level 4 (replicate-level, noisier) | Better SNR, matches 1:1:1 treatment pairing |
 | Config management | Hydra | Raw omegaconf / argparse | Structured overrides, multirun, config groups |
 | Experiment tracking | Weights & Biases | TensorBoard | Better sweep management, team features |
 | Normalization | BatchNorm in encoders | LayerNorm | Standard for MLP encoders in contrastive learning |
 | Split strategy | Scaffold-based (Bemis-Murcko) | Random split | Prevents molecular structure leakage |
+| GPU environment | Google Colab H100 (80 GB HBM3) | Local T4/V100 | Ample VRAM; code stays portable to smaller GPUs |
 
 ---
 
-## Open Decisions
+## Resolved Decisions (formerly Open)
 
-| ID | Question | Status | Impact |
-|----|----------|--------|--------|
-| OPEN-1 | Should dose be treated as augmentation (SupCon) or independent treatments? | **BLOCKING** | Changes effective N from 1,327 to 7,900 |
-| OPEN-2 | L1000 Level 4 (replicate-level, noisier) vs Level 5 (treatment-level, cleaner)? | **BLOCKING** | Affects FR-1.2, preprocessing pipeline |
-| OPEN-3 | Optimal SCARF corruption rate for Cell Painting features? | Non-blocking | Default 40%, tune in Week 3 |
+All open decisions resolved 2026-03-11. FR-2.6 and FR-1.2 are now unblocked.
 
-Do NOT implement FR-2.6 (scaffold split) or FR-1.2 (L1000 download) until OPEN-1 and OPEN-2 are resolved.
+| ID | Decision | Resolution |
+|----|----------|------------|
+| OPEN-1 | Dose as augmentation with quality filtering | SupCon-style positive pairing across doses, but only for treatments passing replicate-correlation filter (90th pctl DMSO null). Effective N ~3,000–5,000. |
+| OPEN-2 | L1000 Level 5 (treatment-level MODZ) | Better SNR, 1:1:1 pairing. Level 4 available as optional backup. |
+| OPEN-3 | SCARF corruption 40% default | Sweep 20/40/60% on morph↔expr in Week 2 (~90 min). Cell Painting features are highly correlated so higher rates tolerable. |
+| Q2 | InfoAlign comparison deferred to P2 | Asymmetric arch (2/6 dirs), different cell line. Frame as out-of-distribution if included. |
+| Q5 | Pivot = per-MOA complementarity analysis | Break by MOA class to show where tri-modal helps vs. doesn't. Conditional analysis is the contribution. |
 
 ---
 
 ## Commands
+
+> **Environment note:** This machine uses `python3`, not `python`. Makefile and scripts assume `python` — run via `make` targets or use `python3` directly.
 
 ```bash
 # Setup & data
@@ -71,12 +79,12 @@ make test                # pytest with coverage
 make lint                # ruff check + black check
 
 # Scripts (direct)
-python scripts/download.py --source morphology|expression|metadata
-python scripts/preprocess.py
-python scripts/train.py model=bi_mol_morph training.batch_size=128 seed=42
-python scripts/evaluate.py --checkpoint checkpoints/best.pt --full
-python scripts/run_ablations.py --matrix core
-python scripts/summarize_ablations.py
+python3 scripts/download.py --source morphology|expression|metadata
+python3 scripts/preprocess.py
+python3 scripts/train.py model=bi_mol_morph training.batch_size=128 seed=42
+python3 scripts/evaluate.py --checkpoint checkpoints/best.pt --full
+python3 scripts/run_ablations.py --matrix core
+python3 scripts/summarize_ablations.py
 
 # Formatting
 ruff check src/ tests/ scripts/ --fix

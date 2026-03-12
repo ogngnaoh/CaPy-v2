@@ -191,7 +191,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 - **D1: AWS S3 public access** to Cell Painting Gallery (cpg0004-lincs). No credentials needed (`--no-sign-request`).
 - **D2: Figshare access** for matched L1000 profiles. Public download, no credentials.
 - **D3: Drug Repurposing Hub** for SMILES metadata. Public download.
-- **D4: Single GPU (T4/V100/A100).** Training takes <30 min per run; full 40-run ablation matrix takes ~20 GPU-hours (~$10–30 cloud cost).
+- **D4: Google Colab H100 GPU.** Training takes <30 min per run on Colab H100 (80 GB HBM3); full 40-run ablation matrix takes ~20 GPU-hours. Code remains portable to T4/V100/A100.
 
 ---
 
@@ -295,13 +295,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 
 ### 10.1 Unresolved questions
 
-| # | Question | Owner | Due |
-|---|----------|-------|-----|
-| Q1 | Should dose be treated as augmentation (all doses of same compound are positive pairs via SupCon) or as independent treatments? This changes effective N from ~1,327 to ~7,900. | Hoang | Week 1 |
-| Q2 | Can InfoAlign's pretrained model be loaded and evaluated on CaPy's retrieval protocol for direct comparison? | Hoang | Week 4 |
-| Q3 | What is the optimal SCARF corruption rate for Cell Painting features specifically? Literature suggests 30–60% for generic tabular data. | Hoang | Week 3 |
-| Q4 | Should L1000 features use Level 4 (replicate-level) or Level 5 (treatment-level aggregated) profiles? Level 4 preserves more samples but adds noise. | Hoang | Week 1 |
-| Q5 | If tri-modal does NOT significantly outperform bi-modal, what is the publication/presentation pivot strategy? | Hoang | Week 5 |
+All questions resolved as of 2026-03-11. See Section 10.2.
 
 ### 10.2 Decisions made
 
@@ -312,6 +306,11 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 | 2026-03-10 | Replace InfoNCE with SigLIP + VICReg | InfoNCE information-theoretically limited with 63 negatives; SigLIP is batch-size agnostic; VICReg prevents collapse |
 | 2026-03-10 | Position CaPy to build on InfoAlign, not compete | InfoAlign is ICLR 2025 from the Broad — acknowledge and fill their systematic ablation gap |
 | 2026-03-10 | Core contribution = tri > bi proof with ablations, not novel architecture | Signals engineering rigor + scientific methodology over architectural novelty; matches ML Engineering role |
+| 2026-03-11 | Q1: Dose as augmentation with quality filtering | Use SupCon-style positive pairing across doses of the same compound, but only for treatments that pass replicate-correlation filter (90th percentile of DMSO null). Effective N ~3,000–5,000. Low-dose/near-DMSO and cytotoxic profiles are excluded before pairing. Dose-aware pairing improvement is a reportable finding. |
+| 2026-03-11 | Q4: L1000 Level 5 (treatment-level aggregated) | Level 5 provides better SNR via Broad's MODZ aggregation. Level 4 replicates aren't independent (technical replicates of same condition), so "more samples" is misleading. Contrastive framework pairs treatments 1:1:1 across modalities — Level 4 would require re-aggregation anyway. Download Level 4 as optional backup for future augmentation experiments. |
+| 2026-03-11 | Q3: SCARF corruption rate — 40% default, sweep in Week 2 | Cell Painting features are highly correlated (clusters of 20–30 texture features), so higher corruption rates are tolerable. Default 40%, sweep 20/40/60% on morph↔expr (1 seed each, ~90 min total) during Week 2. Check feature distributions before assuming corruption rate semantics match literature. |
+| 2026-03-11 | Q2: InfoAlign comparison is P2 stretch goal | InfoAlign is asymmetric (can't do morph→expr), was trained on U2OS (not A549), and only 2/6 retrieval directions are comparable. Cross-cell-line evaluation is confounded. If included, frame as "InfoAlign evaluated out-of-distribution," not a head-to-head comparison. Don't invest time until core results are solid. |
+| 2026-03-11 | Q5: Pivot = per-MOA-class complementarity analysis | Break test set by MOA class to show where tri-modal helps vs. doesn't. "Tri-modal alignment provides significant gains for X mechanism classes but not Y, suggesting marginal value depends on biological redundancy between morphology and expression." If contrastive alignment fails broadly, the diagnostic analysis of why is itself a contribution. |
 
 ---
 
