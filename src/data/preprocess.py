@@ -178,7 +178,7 @@ def _load_metadata(meta_path: Path) -> pd.DataFrame:
     Truncates broad_id to 13 chars and adds compound_id column.
     """
     meta_path = Path(meta_path)
-    df = pd.read_csv(meta_path, sep="\t", low_memory=False)
+    df = pd.read_csv(meta_path, sep="\t", comment="!", low_memory=False)
     if "broad_id" in df.columns:
         df["compound_id"] = df["broad_id"].astype(str).str[:13]
     logger.info("Metadata loaded: %d rows", len(df))

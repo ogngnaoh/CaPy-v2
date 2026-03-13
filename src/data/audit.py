@@ -17,7 +17,9 @@ logger = get_logger(__name__)
 def _audit_morphology(morph_dir: Path) -> dict | None:
     """Audit morphology CSV files. Returns stats dict or None if missing."""
     morph_dir = Path(morph_dir)
-    csv_files = sorted(morph_dir.rglob("*.csv"))
+    csv_files = sorted(
+        list(morph_dir.rglob("*.csv")) + list(morph_dir.rglob("*.csv.gz"))
+    )
     if not csv_files:
         logger.warning("No morphology CSV files found in %s", morph_dir)
         return None
@@ -135,7 +137,7 @@ def _audit_metadata(meta_path: Path) -> dict | None:
         return None
 
     try:
-        df = pd.read_csv(meta_path, sep="\t", low_memory=False)
+        df = pd.read_csv(meta_path, sep="\t", comment="!", low_memory=False)
     except Exception as exc:
         logger.warning("Failed to read metadata: %s", exc)
         return None
@@ -178,7 +180,8 @@ def _compute_overlap(morph_dir: Path, expr_dir: Path, meta_path: Path) -> dict |
 
     # Morphology: extract broad_id from CSVs
     morph_dir = Path(morph_dir)
-    for csv_file in morph_dir.rglob("*.csv"):
+    csv_files = list(morph_dir.rglob("*.csv")) + list(morph_dir.rglob("*.csv.gz"))
+    for csv_file in csv_files:
         try:
             df = pd.read_csv(
                 csv_file, usecols=lambda c: "broad" in c.lower(), low_memory=False
@@ -223,7 +226,7 @@ def _compute_overlap(morph_dir: Path, expr_dir: Path, meta_path: Path) -> dict |
     meta_path = Path(meta_path)
     if meta_path.exists():
         try:
-            df = pd.read_csv(meta_path, sep="\t", low_memory=False)
+            df = pd.read_csv(meta_path, sep="\t", comment="!", low_memory=False)
             if "broad_id" in df.columns:
                 ids = df["broad_id"].dropna().astype(str).str[:13]
                 meta_ids.update(ids)
