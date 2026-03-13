@@ -379,11 +379,18 @@ def run_audit(
     elif overlap and "morph_expr_overlap" in overlap:
         paired_count = overlap["morph_expr_overlap"]
 
-    if paired_count < 5000:
+    if paired_count < 1000:
         logger.warning(
-            "Cross-modal overlap is %d treatments (< 5000). "
+            "Cross-modal overlap is %d compounds (< 1000). "
             "This may be insufficient for contrastive training.",
             paired_count,
+        )
+    else:
+        logger.info(
+            "Cross-modal overlap: %d compounds. "
+            "With multiple doses, expect ~%d treatments.",
+            paired_count,
+            paired_count * 7,
         )
 
     available = sum(1 for s in [morph_stats, expr_stats, meta_stats] if s is not None)
