@@ -261,6 +261,10 @@ def _validate_smiles(smiles: str) -> bool:
     if not isinstance(smiles, str) or not smiles.strip():
         return False
     stripped = _strip_cxsmiles(smiles)
+    # Skip known CMap sentinel values (e.g. -666) before calling RDKit
+    # to avoid stderr spam from parse errors
+    if stripped.lstrip("-").isdigit():
+        return False
     mol = Chem.MolFromSmiles(stripped)
     return mol is not None
 
