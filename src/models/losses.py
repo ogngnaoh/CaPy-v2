@@ -37,7 +37,7 @@ class SigLIPLoss(nn.Module):
         sim = z_a @ z_b.T  # [N, N] cosine similarity (inputs are L2-normed)
         n = z_a.shape[0]
         targets = 2 * torch.eye(n, device=z_a.device) - 1  # +1 diag, -1 off-diag
-        temperature = self.log_temperature.exp().clamp(max=100.0)
+        temperature = self.log_temperature.exp().clamp(min=1.0, max=30.0)
         logits = targets * (temperature * sim + self.bias)
         return -f.logsigmoid(logits).mean()
 

@@ -81,7 +81,7 @@ make lint                # ruff check + black check
 # Scripts (direct)
 python3 scripts/download.py --source morphology|expression|metadata
 python3 scripts/preprocess.py
-python3 scripts/train.py model=bi_mol_morph training.batch_size=128 seed=42
+python3 scripts/train.py model=bi_mol_morph training.batch_size=256 seed=42
 python3 scripts/evaluate.py --checkpoint checkpoints/best.pt --full
 python3 scripts/run_ablations.py --matrix core
 python3 scripts/summarize_ablations.py
@@ -206,8 +206,8 @@ SigLIP uses learnable temperature and bias: `logits = targets * (temp * sim + bi
 
 ### Training Hyperparameters
 
-AdamW (weight_decay=1e-4), LR=1e-3, cosine annealing + 10-epoch warmup,
-batch_size=128–256, epochs=200, early_stopping patience=30 on val mean R@10,
+AdamW (weight_decay=1e-4), LR=5e-4, cosine annealing + 10-epoch warmup,
+batch_size=256–512, epochs=200, early_stopping patience=30 on val mean R@10,
 SCARF corruption=40%, gradient clip max_norm=1.0.
 
 ---
