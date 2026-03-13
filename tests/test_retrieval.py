@@ -12,7 +12,6 @@ from src.evaluation.retrieval import (
     compute_retrieval_metrics,
 )
 
-
 # ── Retrieval tests (FR-8.1) ────────────────────────────────
 
 

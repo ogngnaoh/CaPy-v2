@@ -10,7 +10,6 @@ from src.models.capy import CaPyModel
 from src.models.losses import SigLIPLoss, VICRegLoss
 from src.training.trainer import Trainer
 
-
 # ── Fixtures ─────────────────────────────────────────────────
 
 
