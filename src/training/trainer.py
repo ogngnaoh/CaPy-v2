@@ -4,6 +4,7 @@ import itertools
 from pathlib import Path
 
 import torch
+from omegaconf import OmegaConf
 
 from src.evaluation.diagnostics import compute_alignment, compute_uniformity
 from src.evaluation.retrieval import compute_all_retrieval_metrics
@@ -83,6 +84,9 @@ class Trainer:
         # Step counter for W&B
         self.global_step = 0
 
+        # VICReg persistence tracking (Edge 5.2)
+        self._vicreg_high_epochs: dict[str, int] = {}
+
     def train(self) -> dict:
         """Run full training loop. Returns dict of best metrics."""
         logger.info(
@@ -121,13 +125,18 @@ class Trainer:
                 )
                 break
 
+            # VICReg persistence tracking (Edge 5.2)
+            self._check_vicreg_persistence(train_metrics)
+
             # Collapse detection
             uniformity_scores = {
                 k: v
                 for k, v in val_metrics.items()
                 if k.startswith("uniform_")
             }
-            self.check_collapse(uniformity_scores)
+            collapse = self.check_collapse(uniformity_scores)
+            if collapse:
+                self._log_collapse_to_wandb()
 
         logger.info(
             "Training complete. Best mean_R@10=%.4f at epoch %d. "
@@ -293,6 +302,9 @@ class Trainer:
                 "siglip_state_dict": self.siglip_loss_fn.state_dict(),
                 "epoch": epoch,
                 "best_metric": self.best_metric,
+                "config": OmegaConf.to_container(
+                    self.config, resolve=True
+                ),
             },
             self.checkpoint_path,
         )
@@ -312,10 +324,15 @@ class Trainer:
         self.patience_counter += 1
         return self.patience_counter >= self.patience
 
-    def check_collapse(self, uniformity_scores: dict) -> None:
-        """Log collapse warnings if uniformity > -0.5 (FR-7.4)."""
+    def check_collapse(self, uniformity_scores: dict) -> bool:
+        """Log collapse warnings if uniformity > -0.5 (FR-7.4).
+
+        Returns True if collapse detected in any modality.
+        """
+        collapse_detected = False
         for key, score in uniformity_scores.items():
             if score > -0.5:
+                collapse_detected = True
                 modality = key.replace("uniform_", "")
                 logger.warning(
                     "COLLAPSE WARNING: %s uniformity=%.4f "
@@ -324,6 +341,40 @@ class Trainer:
                     modality,
                     score,
                 )
+        return collapse_detected
+
+    def _check_vicreg_persistence(self, train_metrics: dict) -> None:
+        """Warn if VICReg variance loss stays high for >=20 epochs (Edge 5.2)."""
+        for key, val in train_metrics.items():
+            if not key.startswith("vicreg_"):
+                continue
+            modality = key.replace("vicreg_", "")
+            if val > 0.5:
+                self._vicreg_high_epochs[modality] = (
+                    self._vicreg_high_epochs.get(modality, 0) + 1
+                )
+                if self._vicreg_high_epochs[modality] >= 20:
+                    logger.warning(
+                        "VICReg variance loss persistently high for %s "
+                        "(>0.5 for %d epochs). Embeddings may have low "
+                        "variance despite regularization.",
+                        modality,
+                        self._vicreg_high_epochs[modality],
+                    )
+            else:
+                self._vicreg_high_epochs[modality] = 0
+
+    def _log_collapse_to_wandb(self) -> None:
+        """Log collapse_warning=True to W&B when collapse detected."""
+        try:
+            import wandb
+
+            if wandb.run is not None:
+                wandb.log(
+                    {"collapse_warning": True}, step=self.global_step
+                )
+        except ImportError:
+            pass
 
     def _log_to_wandb(
         self, epoch: int, train_metrics: dict, val_metrics: dict

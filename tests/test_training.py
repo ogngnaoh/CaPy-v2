@@ -179,6 +179,16 @@ class TestCollapseDetection:
         trainer.check_collapse({"uniform_mol": -2.5, "uniform_morph": -3.0})
         assert "COLLAPSE WARNING" not in caplog.text
 
+    def test_returns_true_when_collapse_detected(self, trainer):
+        """check_collapse should return True when collapse detected."""
+        result = trainer.check_collapse({"uniform_mol": -0.3})
+        assert result is True
+
+    def test_returns_false_when_healthy(self, trainer):
+        """check_collapse should return False when healthy."""
+        result = trainer.check_collapse({"uniform_mol": -2.5})
+        assert result is False
+
 
 class TestCheckpointing:
     """Tests for save_checkpoint (FR-7.2)."""
@@ -196,6 +206,12 @@ class TestCheckpointing:
         assert "optimizer_state_dict" in checkpoint
         assert "epoch" in checkpoint
         assert checkpoint["epoch"] == 1
+
+    def test_checkpoint_contains_config(self, trainer):
+        """Checkpoint should include the full config (FR-7.2)."""
+        trainer.save_checkpoint(1, {"mean_R@10": 0.5})
+        checkpoint = torch.load(trainer.checkpoint_path, weights_only=False)
+        assert "config" in checkpoint
 
 
 # ── Integration tests ────────────────────────────────────────
