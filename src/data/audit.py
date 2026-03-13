@@ -197,13 +197,14 @@ def _compute_overlap(morph_dir: Path, expr_dir: Path, meta_path: Path) -> dict |
         except Exception:
             continue
 
-    # Expression: extract broad_id from column metadata
+    # Expression: extract compound IDs from column metadata
+    # L1000 data uses "pert_id" (13-char BRD format), not "broad_id"
     expr_dir = Path(expr_dir)
     for meta_file in expr_dir.glob("col_meta_*.txt"):
         try:
             df = pd.read_csv(meta_file, sep="\t", low_memory=False)
             for col in df.columns:
-                if "broad" in col.lower():
+                if "broad" in col.lower() or col.lower() == "pert_id":
                     ids = df[col].dropna().astype(str).str[:13]
                     expr_ids.update(ids)
                     break
@@ -215,7 +216,7 @@ def _compute_overlap(morph_dir: Path, expr_dir: Path, meta_path: Path) -> dict |
         try:
             df = pd.read_csv(pert_file, sep="\t", low_memory=False)
             for col in df.columns:
-                if "broad" in col.lower():
+                if "broad" in col.lower() or col.lower() == "pert_id":
                     ids = df[col].dropna().astype(str).str[:13]
                     expr_ids.update(ids)
                     break
