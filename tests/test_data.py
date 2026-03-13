@@ -509,6 +509,18 @@ class TestLoadExpression:
         assert "pert_id" in pert_info.columns
         assert len(pert_info) == 35
 
+    def test_col_meta_without_inst_id(self, mock_expr_data_no_inst_id):
+        """col_meta with non-inst_id first column is auto-renamed and merged."""
+        from src.data.preprocess import _load_expression
+
+        expr_df, _ = _load_expression(
+            mock_expr_data_no_inst_id["dir"],
+            data_df=mock_expr_data_no_inst_id["data_df"],
+        )
+        assert "pert_id" in expr_df.columns
+        assert "x_smiles" in expr_df.columns
+        assert len(expr_df) == 40
+
 
 # ── Preprocessing: Pass-through stubs (FR-2.1/2.2) ──────────
 
@@ -590,6 +602,32 @@ class TestMatchTreatments:
 
         assert _strip_cxsmiles("CCO |SgD:0,1|") == "CCO"
         assert _strip_cxsmiles("CCO") == "CCO"
+
+    def test_raises_on_missing_compound_and_pert_id(self):
+        """Raises KeyError when expr_df has neither compound_id nor pert_id."""
+        from src.data.preprocess import match_treatments
+
+        morph_df = pd.DataFrame(
+            {
+                "compound_id": ["BRD-K00000001"],
+                "Cells_F0": [1.0],
+            }
+        )
+        # Expression df without compound_id or pert_id
+        expr_df = pd.DataFrame(
+            {
+                "some_other_col": ["x"],
+                "gene_0_at": [0.5],
+            }
+        )
+        meta_df = pd.DataFrame(
+            {
+                "broad_id": ["BRD-K00000001"],
+                "smiles": ["CCO"],
+            }
+        )
+        with pytest.raises(KeyError, match="neither 'compound_id' nor 'pert_id'"):
+            match_treatments(morph_df, expr_df, meta_df)
 
     def test_removes_missing_modality(
         self, mock_morph_batches, mock_expr_data, mock_metadata_for_preprocess

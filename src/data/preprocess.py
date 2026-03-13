@@ -128,6 +128,7 @@ def _load_expression(
         gene columns + metadata columns.
     """
     expr_dir = Path(expr_dir)
+    gctoo = None
 
     # Load data matrix
     if data_df is None:
@@ -155,10 +156,40 @@ def _load_expression(
 
     # Load and merge column metadata
     col_meta_files = list(expr_dir.glob("col_meta_*.txt"))
+    col_meta = None
     if col_meta_files:
         col_meta = pd.read_csv(col_meta_files[0], sep="\t", low_memory=False)
+        if "inst_id" not in col_meta.columns:
+            # L1000 col_meta files often have sample IDs as unnamed first column
+            first_col = col_meta.columns[0]
+            sample_ids = set(expr_t["inst_id"].astype(str))
+            if set(col_meta[first_col].astype(str).head(100)) & sample_ids:
+                col_meta = col_meta.rename(columns={first_col: "inst_id"})
+                logger.info(
+                    "Renamed col_meta column '%s' to 'inst_id'", first_col
+                )
+            else:
+                logger.warning(
+                    "inst_id not found in col_meta columns: %s",
+                    col_meta.columns.tolist()[:10],
+                )
+                col_meta = None
+
+    # Fallback: GCTX embedded column metadata
+    if col_meta is None and gctoo is not None:
+        col_meta = gctoo.col_metadata_df.copy()
+        col_meta.index.name = "inst_id"
+        col_meta = col_meta.reset_index()
+        logger.info(
+            "Using GCTX embedded col_metadata (%d columns)",
+            len(col_meta.columns) - 1,
+        )
+
+    if col_meta is not None:
         expr_t = expr_t.merge(col_meta, on="inst_id", how="left")
         logger.info("Merged col_meta: %d columns added", len(col_meta.columns) - 1)
+    else:
+        logger.warning("No column metadata available for expression data")
 
     # Load pert_info
     pert_info_files = list(expr_dir.glob("*pert_info*"))
@@ -383,9 +414,15 @@ def match_treatments(
         Matched DataFrame with morph features, expr features, smiles, moa.
     """
     # Ensure compound_id on expression side
-    if "compound_id" not in expr_df.columns and "pert_id" in expr_df.columns:
-        expr_df = expr_df.copy()
-        expr_df["compound_id"] = expr_df["pert_id"].astype(str).str[:13]
+    if "compound_id" not in expr_df.columns:
+        if "pert_id" in expr_df.columns:
+            expr_df = expr_df.copy()
+            expr_df["compound_id"] = expr_df["pert_id"].astype(str).str[:13]
+        else:
+            raise KeyError(
+                "Expression DataFrame has neither 'compound_id' nor 'pert_id'. "
+                f"Available columns: {expr_df.columns.tolist()[:15]}"
+            )
 
     # Find overlapping compounds
     morph_ids = set(morph_df["compound_id"].unique())

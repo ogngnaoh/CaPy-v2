@@ -169,6 +169,69 @@ def mock_expr_data(tmp_path):
 
 
 @pytest.fixture
+def mock_expr_data_no_inst_id(tmp_path):
+    """Mock expression data where col_meta first column is NOT named 'inst_id'.
+
+    Simulates real Figshare col_meta files where sample IDs are in a column
+    with a different name (e.g. 'profile_id' or unnamed/index-based).
+    """
+    expr_dir = tmp_path / "expression"
+    expr_dir.mkdir()
+    np.random.seed(42)
+
+    n_genes = 20
+    n_samples = 40
+    gene_ids = [f"gene_{i}_at" for i in range(n_genes)]
+    sample_ids = [f"sample_{i:04d}" for i in range(n_samples)]
+    compound_ids = [f"BRD-K{i:08d}" for i in range(n_samples)]
+    compound_ids[0] = "BRD-K00000000"
+    compound_ids[1] = "BRD-K00000000"
+
+    data_df = pd.DataFrame(
+        np.random.randn(n_genes, n_samples),
+        index=gene_ids,
+        columns=sample_ids,
+    )
+
+    # col_meta with first column named 'profile_id' instead of 'inst_id'
+    smiles_list = [""] * 2 + [f"C{'C' * (i % 8)}O" for i in range(2, n_samples)]
+    col_meta = pd.DataFrame(
+        {
+            "profile_id": sample_ids,
+            "pert_id": compound_ids,
+            "x_smiles": smiles_list,
+            "dose_value": [0.0, 0.0]
+            + [float(2**i) for i in range(n_samples - 2)],
+            "pert_iname": ["DMSO", "DMSO"]
+            + [f"cmpd_{i}" for i in range(2, n_samples)],
+            "pert_type": ["ctl_vehicle", "ctl_vehicle"]
+            + ["trt_cp"] * (n_samples - 2),
+        }
+    )
+    col_meta.to_csv(
+        expr_dir / "col_meta_level_5.txt", sep="\t", index=False
+    )
+
+    # pert_info
+    n_pert = 35
+    pert_info = pd.DataFrame(
+        {
+            "pert_id": [f"BRD-K{i:08d}" for i in range(n_pert)],
+            "pert_iname": [f"cmpd_{i}" for i in range(n_pert)],
+            "moa": [f"moa_{i % 5}" if i < 28 else None for i in range(n_pert)],
+        }
+    )
+    pert_info.to_csv(expr_dir / "pert_info.txt", sep="\t", index=False)
+
+    data_df.to_parquet(expr_dir / "data_df.parquet")
+
+    return {
+        "dir": expr_dir,
+        "data_df": data_df,
+    }
+
+
+@pytest.fixture
 def mock_matched_df():
     """Pre-matched DataFrame with morph + expr features plus edge cases.
 
