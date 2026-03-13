@@ -182,10 +182,13 @@ class TestCaPyModel:
             "morph": torch.randn(16, 1500),
             "expr": torch.randn(16, 978),
         }
-        embeddings = model(batch)
+        embeddings, encoder_outputs = model(batch)
         assert embeddings["mol"].shape == (16, 256)
         assert embeddings["morph"].shape == (16, 256)
         assert embeddings["expr"].shape == (16, 256)
+        assert encoder_outputs["mol"].shape == (16, 512)
+        assert encoder_outputs["morph"].shape == (16, 512)
+        assert encoder_outputs["expr"].shape == (16, 512)
 
     def test_forward_embeddings_l2_normalized(self, tri_modal_config):
         """All output embeddings should be L2-normalized."""
@@ -196,7 +199,7 @@ class TestCaPyModel:
             "morph": torch.randn(16, 1500),
             "expr": torch.randn(16, 978),
         }
-        embeddings = model(batch)
+        embeddings, _ = model(batch)
         for m in ["mol", "morph", "expr"]:
             norms = torch.norm(embeddings[m], p=2, dim=1)
             assert torch.allclose(norms, torch.ones(16), atol=1e-6)
@@ -209,10 +212,12 @@ class TestCaPyModel:
             "mol": torch.randn(8, 2048),
             "morph": torch.randn(8, 1500),
         }
-        embeddings = model(batch)
+        embeddings, encoder_outputs = model(batch)
         assert "mol" in embeddings
         assert "morph" in embeddings
         assert "expr" not in embeddings
+        assert "mol" in encoder_outputs
+        assert "morph" in encoder_outputs
 
     def test_parameter_count_reasonable(self, tri_modal_config):
         """Total parameter count should be in expected range."""
@@ -230,8 +235,10 @@ class TestCaPyModel:
             "morph": torch.randn(8, 1500),
             "expr": torch.randn(8, 978),
         }
-        embeddings = model(batch)
-        loss = sum(e.sum() for e in embeddings.values())
+        embeddings, encoder_outputs = model(batch)
+        loss = sum(e.sum() for e in embeddings.values()) + sum(
+            e.sum() for e in encoder_outputs.values()
+        )
         loss.backward()
         for name, param in model.named_parameters():
             assert param.grad is not None, f"No gradient for {name}"

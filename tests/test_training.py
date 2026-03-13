@@ -85,7 +85,11 @@ def _make_tiny_config(tmp_path):
                 "epochs": 3,
                 "patience": 2,
                 "gradient_clip_max_norm": 1.0,
-                "loss": {"vicreg_lambda": 0.1, "siglib_bias_init": 0.0},
+                "loss": {
+                    "vicreg_lambda": 0.1,
+                    "siglib_bias_init": 0.0,
+                    "siglib_log_temp_init": 2.0,
+                },
                 "mixed_precision": False,
                 "num_workers": 0,
             },
@@ -99,7 +103,10 @@ def trainer(tmp_path):
     """Build a Trainer with tiny model and synthetic data."""
     config = _make_tiny_config(tmp_path)
     model = CaPyModel(config)
-    siglip_fn = SigLIPLoss(bias_init=config.training.loss.siglib_bias_init)
+    siglip_fn = SigLIPLoss(
+        bias_init=config.training.loss.siglib_bias_init,
+        log_temp_init=config.training.loss.siglib_log_temp_init,
+    )
     vicreg_fn = VICRegLoss()
 
     optimizer = torch.optim.AdamW(

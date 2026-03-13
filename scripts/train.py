@@ -90,7 +90,8 @@ def main(config: DictConfig) -> None:
     from src.models.losses import SigLIPLoss, VICRegLoss
 
     siglip_loss_fn = SigLIPLoss(
-        bias_init=config.training.loss.siglib_bias_init
+        bias_init=config.training.loss.siglib_bias_init,
+        log_temp_init=config.training.loss.siglib_log_temp_init,
     )
     vicreg_loss_fn = VICRegLoss()
 

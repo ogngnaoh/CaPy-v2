@@ -58,13 +58,19 @@ class TestSigLIPLoss:
         assert siglip_loss.bias.requires_grad is True
         assert siglip_loss.bias.item() == 0.0
 
+    def test_temperature_is_learnable(self, siglip_loss):
+        """Temperature should be a learnable parameter."""
+        assert hasattr(siglip_loss, "log_temperature")
+        assert siglip_loss.log_temperature.requires_grad is True
+
     def test_gradient_flows_through_bias(self, siglip_loss):
-        """Bias should receive gradients after backward."""
+        """Bias and temperature should receive gradients after backward."""
         z_a = f.normalize(torch.randn(8, 256), dim=-1)
         z_b = f.normalize(torch.randn(8, 256), dim=-1)
         loss = siglip_loss(z_a, z_b)
         loss.backward()
         assert siglip_loss.bias.grad is not None
+        assert siglip_loss.log_temperature.grad is not None
 
     def test_gradient_flows_through_inputs(self, siglip_loss):
         """Gradients should flow to input embeddings."""
@@ -147,10 +153,18 @@ class TestTotalLoss:
             m: f.normalize(torch.randn(batch_size, dim), dim=-1) for m in modalities
         }
 
+    def _make_encoder_outputs(self, modalities, batch_size=16, dim=512):
+        """Helper: create random encoder outputs (pre-projection)."""
+        return {m: torch.randn(batch_size, dim) for m in modalities}
+
     def test_tri_modal_loss_keys(self, siglip_loss, vicreg_loss):
         """T1 config should produce all 7 expected keys."""
-        embeddings = self._make_embeddings(["mol", "morph", "expr"])
-        _, loss_dict = compute_total_loss(embeddings, siglip_loss, vicreg_loss)
+        mods = ["mol", "morph", "expr"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        _, loss_dict = compute_total_loss(
+            embeddings, siglip_loss, vicreg_loss, encoder_outputs=enc_outputs
+        )
         expected_keys = {
             "loss_mol_morph",
             "loss_mol_expr",
@@ -164,8 +178,12 @@ class TestTotalLoss:
 
     def test_bi_modal_loss_keys(self, siglip_loss, vicreg_loss):
         """B4 config should only produce mol+morph keys."""
-        embeddings = self._make_embeddings(["mol", "morph"])
-        _, loss_dict = compute_total_loss(embeddings, siglip_loss, vicreg_loss)
+        mods = ["mol", "morph"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        _, loss_dict = compute_total_loss(
+            embeddings, siglip_loss, vicreg_loss, encoder_outputs=enc_outputs
+        )
         expected_keys = {
             "loss_mol_morph",
             "vicreg_mol",
@@ -176,8 +194,12 @@ class TestTotalLoss:
 
     def test_bi_mol_expr_loss_keys(self, siglip_loss, vicreg_loss):
         """B5 config should produce mol+expr keys."""
-        embeddings = self._make_embeddings(["mol", "expr"])
-        _, loss_dict = compute_total_loss(embeddings, siglip_loss, vicreg_loss)
+        mods = ["mol", "expr"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        _, loss_dict = compute_total_loss(
+            embeddings, siglip_loss, vicreg_loss, encoder_outputs=enc_outputs
+        )
         expected_keys = {
             "loss_mol_expr",
             "vicreg_mol",
@@ -188,22 +210,49 @@ class TestTotalLoss:
 
     def test_total_loss_is_differentiable(self, siglip_loss, vicreg_loss):
         """Total loss tensor should support backward()."""
-        embeddings = self._make_embeddings(["mol", "morph", "expr"])
-        total_loss, _ = compute_total_loss(embeddings, siglip_loss, vicreg_loss)
+        mods = ["mol", "morph", "expr"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        total_loss, _ = compute_total_loss(
+            embeddings, siglip_loss, vicreg_loss, encoder_outputs=enc_outputs
+        )
         assert total_loss.requires_grad is True
         total_loss.backward()
         assert siglip_loss.bias.grad is not None
 
     def test_loss_dict_values_are_floats(self, siglip_loss, vicreg_loss):
         """All dict values should be Python floats, not tensors."""
-        embeddings = self._make_embeddings(["mol", "morph"])
-        _, loss_dict = compute_total_loss(embeddings, siglip_loss, vicreg_loss)
+        mods = ["mol", "morph"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        _, loss_dict = compute_total_loss(
+            embeddings, siglip_loss, vicreg_loss, encoder_outputs=enc_outputs
+        )
         for key, val in loss_dict.items():
             assert isinstance(val, float), f"{key} is {type(val)}, expected float"
 
     def test_components_sum_to_total(self, siglip_loss, vicreg_loss):
         """Sum of individual components should equal loss_total."""
-        embeddings = self._make_embeddings(["mol", "morph", "expr"])
-        _, loss_dict = compute_total_loss(embeddings, siglip_loss, vicreg_loss)
+        mods = ["mol", "morph", "expr"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        _, loss_dict = compute_total_loss(
+            embeddings, siglip_loss, vicreg_loss, encoder_outputs=enc_outputs
+        )
         component_sum = sum(v for k, v in loss_dict.items() if k != "loss_total")
         assert abs(component_sum - loss_dict["loss_total"]) < 1e-4
+
+    def test_vicreg_on_encoder_outputs_not_embeddings(self, vicreg_loss):
+        """VICReg variance term is satisfiable for unnormalized encoder
+        outputs but saturated for L2-normalized embeddings."""
+        torch.manual_seed(42)
+        # Large batch to minimize covariance noise
+        n = 1024
+        # L2-normalized: per-dim std ≈ 1/sqrt(256) ≈ 0.06 → hinge ≈ 0.94
+        z_normed = f.normalize(torch.randn(n, 256), dim=-1)
+        loss_normed = vicreg_loss(z_normed).item()
+        # Unnormalized randn: per-dim std ≈ 1.0 → variance hinge ≈ 0
+        z_raw = torch.randn(n, 256)
+        loss_raw = vicreg_loss(z_raw).item()
+        # Unnormalized should have much lower loss (variance term near 0)
+        assert loss_raw < loss_normed

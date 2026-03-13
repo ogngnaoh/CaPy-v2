@@ -194,10 +194,14 @@ CaPy-v2/
 ### Loss
 
 ```
-L_total = SigLIP(mol,morph) + SigLIP(mol,expr) + SigLIP(morph,expr)
-        + λ · (VICReg(mol) + VICReg(morph) + VICReg(expr))
+L_total = SigLIP(emb_mol,emb_morph) + SigLIP(emb_mol,emb_expr) + SigLIP(emb_morph,emb_expr)
+        + λ · (VICReg(enc_mol) + VICReg(enc_morph) + VICReg(enc_expr))
 ```
 
+SigLIP operates on L2-normalized embeddings (post-projection).
+VICReg operates on encoder outputs (pre-projection, pre-normalization) —
+applying VICReg to L2-normalized vectors causes the variance hinge to saturate.
+SigLIP uses learnable temperature and bias: `logits = targets * (temp * sim + bias)`.
 λ = 0.1 (default). For bi-modal configs, only relevant pairs are included.
 
 ### Training Hyperparameters

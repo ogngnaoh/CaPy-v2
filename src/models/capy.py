@@ -74,18 +74,21 @@ class CaPyModel(nn.Module):
 
     def forward(
         self, batch: dict[str, torch.Tensor]
-    ) -> dict[str, torch.Tensor]:
-        """Forward pass returning embeddings for active modalities.
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+        """Forward pass returning embeddings and encoder outputs.
 
         Args:
             batch: Dict with keys "mol", "morph", "expr" (whichever are active).
 
         Returns:
-            Dict of L2-normalized embeddings, e.g. {"mol": Tensor[N,256], ...}
+            (embeddings, encoder_outputs) where embeddings are L2-normalized
+            256-dim vectors and encoder_outputs are pre-projection 512-dim vectors.
         """
         embeddings = {}
+        encoder_outputs = {}
         for m in self.modalities:
             h = self.encoders[m](batch[m])
             z = self.projections[m](h)
             embeddings[m] = z
-        return embeddings
+            encoder_outputs[m] = h
+        return embeddings, encoder_outputs

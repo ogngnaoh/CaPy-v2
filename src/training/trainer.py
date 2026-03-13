@@ -171,12 +171,13 @@ class Trainer:
                 dtype=self.amp_dtype,
                 enabled=self.use_amp,
             ):
-                embeddings = self.model(batch_gpu)
+                embeddings, encoder_outputs = self.model(batch_gpu)
                 total_loss, loss_dict = compute_total_loss(
                     embeddings,
                     self.siglip_loss_fn,
                     self.vicreg_loss_fn,
                     self.vicreg_lambda,
+                    encoder_outputs=encoder_outputs,
                 )
 
             # NaN detection (FSD edge case 5.2)
@@ -247,12 +248,13 @@ class Trainer:
                     dtype=self.amp_dtype,
                     enabled=self.use_amp,
                 ):
-                    embeddings = self.model(batch_gpu)
+                    embeddings, encoder_outputs = self.model(batch_gpu)
                     total_loss, _ = compute_total_loss(
                         embeddings,
                         self.siglip_loss_fn,
                         self.vicreg_loss_fn,
                         self.vicreg_lambda,
+                        encoder_outputs=encoder_outputs,
                     )
 
                 for m in self.modalities:

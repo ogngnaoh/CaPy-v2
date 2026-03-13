@@ -12,14 +12,17 @@ _MODALITY_ORDER = {"mol": 0, "morph": 1, "expr": 2}
 class SigLIPLoss(nn.Module):
     """SigLIP pairwise contrastive loss (FR-6.1).
 
-    Computes: mean(-log_sigmoid(targets * sim + bias))
+    Computes: mean(-log_sigmoid(targets * (temperature * sim + bias)))
     where targets[i,j] = +1 if i==j, -1 otherwise.
-    Bias is a learnable parameter initialized to bias_init.
+    Temperature and bias are learnable parameters (following SigLIP paper).
     """
 
-    def __init__(self, bias_init: float = 0.0) -> None:
+    def __init__(
+        self, bias_init: float = 0.0, log_temp_init: float = 2.0
+    ) -> None:
         super().__init__()
         self.bias = nn.Parameter(torch.tensor(bias_init))
+        self.log_temperature = nn.Parameter(torch.tensor(log_temp_init))
 
     def forward(self, z_a: torch.Tensor, z_b: torch.Tensor) -> torch.Tensor:
         """Compute SigLIP loss between two sets of embeddings.
@@ -34,7 +37,8 @@ class SigLIPLoss(nn.Module):
         sim = z_a @ z_b.T  # [N, N] cosine similarity (inputs are L2-normed)
         n = z_a.shape[0]
         targets = 2 * torch.eye(n, device=z_a.device) - 1  # +1 diag, -1 off-diag
-        logits = targets * sim + self.bias
+        temperature = self.log_temperature.exp().clamp(max=100.0)
+        logits = targets * (temperature * sim + self.bias)
         return -f.logsigmoid(logits).mean()
 
 
@@ -77,6 +81,7 @@ def compute_total_loss(
     siglib_loss_fn: SigLIPLoss,
     vicreg_loss_fn: VICRegLoss,
     vicreg_lambda: float = 0.1,
+    encoder_outputs: dict[str, torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """Compute total loss for all active modality pairs (FR-6.3).
 
@@ -85,6 +90,8 @@ def compute_total_loss(
         siglib_loss_fn: SigLIP loss function instance.
         vicreg_loss_fn: VICReg loss function instance.
         vicreg_lambda: Weight for VICReg regularization terms.
+        encoder_outputs: Dict of pre-projection encoder outputs (for VICReg).
+            If None, falls back to embeddings (backward compat).
 
     Returns:
         (total_loss, loss_dict) where loss_dict has individual components.
@@ -96,15 +103,16 @@ def compute_total_loss(
     # Sort modalities by canonical order: mol, morph, expr
     modalities = sorted(embeddings.keys(), key=lambda m: _MODALITY_ORDER[m])
 
-    # SigLIP for every pair of active modalities
+    # SigLIP for every pair of active modalities (on L2-normalized embeddings)
     for m_a, m_b in itertools.combinations(modalities, 2):
         pair_loss = siglib_loss_fn(embeddings[m_a], embeddings[m_b])
         loss_dict[f"loss_{m_a}_{m_b}"] = pair_loss.item()
         total_loss = total_loss + pair_loss
 
-    # VICReg per active modality (scaled by lambda)
+    # VICReg per active modality (on pre-normalization encoder outputs)
+    vicreg_inputs = encoder_outputs if encoder_outputs is not None else embeddings
     for m in modalities:
-        vreg_loss = vicreg_loss_fn(embeddings[m])
+        vreg_loss = vicreg_loss_fn(vicreg_inputs[m])
         scaled = vicreg_lambda * vreg_loss
         loss_dict[f"vicreg_{m}"] = scaled.item()
         total_loss = total_loss + scaled
