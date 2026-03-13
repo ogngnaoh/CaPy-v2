@@ -9,7 +9,7 @@ mol_encoder:
   dropout: 0.1
 
 morph_encoder:
-  input_dim: 1500
+  input_dim: 1774  # Overridden at runtime from feature_columns.json
   hidden_dims: [1024, 1024]
   output_dim: 512
   dropout: 0.1

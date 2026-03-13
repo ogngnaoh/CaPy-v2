@@ -9,7 +9,7 @@ import os
 
 import hydra
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 from src.utils.logging import get_logger
 from src.utils.seeding import seed_everything
@@ -55,6 +55,29 @@ def main(config: DictConfig) -> None:
             "Reduce batch_size."
         )
         raise RuntimeError(msg)
+
+    # Override encoder input_dims from actual processed data
+    import json
+
+    with open(config.data.output.feature_columns_path) as f:
+        feature_cols = json.load(f)
+
+    dim_map = {
+        "morph_encoder": len(feature_cols["morph_features"]),
+        "expr_encoder": len(feature_cols["expr_features"]),
+    }
+    with open_dict(config):
+        for enc_key, actual_dim in dim_map.items():
+            if enc_key.split("_")[0] in config.model.modalities:
+                cfg_dim = config.model[enc_key].input_dim
+                if cfg_dim != actual_dim:
+                    logger.info(
+                        "Overriding %s.input_dim: %d -> %d (from data)",
+                        enc_key,
+                        cfg_dim,
+                        actual_dim,
+                    )
+                    config.model[enc_key].input_dim = actual_dim
 
     # Build model
     from src.models.capy import CaPyModel
