@@ -265,8 +265,16 @@ Use context7 MCP for up-to-date PyTorch, Hydra, and RDKit documentation.
 
 ## Current Phase
 
-**Phase 1 — Foundation** (Weeks 1–3)
+**Phase 1 — Foundation** (Weeks 1–3) — **GATE PASSED** (single seed)
 
-Gate: Bi-modal mol↔morph compound-level R@10 > 10% (2x random at ~200 val compounds) AND alignment < 1.5
+Gate: Bi-modal mol↔morph compound-level R@10 > 10% AND alignment < 1.5
 
-Current focus: Data audit + repo scaffold → Encoders + evaluation → First bi-modal baseline.
+Result (seed 42): compound R@10 = 12.7% (2.25x random), alignment = 1.464, no collapse (uniformity mol=-2.10, morph=-2.17)
+
+Current focus: Multi-seed validation (seeds 123, 456, 789) to confirm robustness, then Phase 2.
+
+**Phase 2 — Tri-modal** (Weeks 4–6)
+
+Gate: Tri-modal beats best bi-modal on at least one metric category, OR clear pivot plan defined.
+
+Next: Train B5 (Mol↔Expr), B6 (Morph↔Expr) bi-modal baselines, then T1 tri-modal (3 seeds).

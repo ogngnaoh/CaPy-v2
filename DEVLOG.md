@@ -5,6 +5,18 @@
 
 ---
 
+### 2026-03-14 04:30 — [MILESTONE] Phase 1 gate passed (single seed), multi-seed validation prep
+- **Branch:** `main` | **Commit:** pending
+- Phase 1 gate result (seed 42): compound R@10 = 12.7% > 10% threshold, alignment = 1.464 < 1.5 threshold
+- Result is 2.25x random baseline (random = 5.65% at 177 val compounds), no collapse (uniformity mol=-2.10, morph=-2.17)
+- Implemented `scripts/run_ablations.py` (FR-9.1): full ablation harness with `--resume`, `--configs`, `--seeds` support
+- Checkpoint now saves full val metrics dict for ablation result collection
+- Updated Colab notebook: multi-seed validation cells, Phase 2 training cells, result comparison table
+- Updated CLAUDE.md current phase to reflect gate passed, next steps
+- 153 tests passing, lint clean
+- **Next:** Multi-seed validation (seeds 123, 456, 789) on Colab, then Phase 2 bi-modal baselines + tri-modal
+- Files: `scripts/run_ablations.py`, `src/training/trainer.py`, `notebooks/colab_training.ipynb`, `CLAUDE.md`
+
 ### 2026-03-14 03:30 — [FIX] R@10 stuck at ~3%: 5 structural issues identified and fixed
 - **Branch:** `main` | **Commit:** `9f8219a`
 - **Root cause:** R@10=2.7% was NOT a hyperparameter issue — 5 cascading structural problems:

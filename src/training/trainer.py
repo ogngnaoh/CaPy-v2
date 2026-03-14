@@ -338,6 +338,7 @@ class Trainer:
                 "siglip_state_dict": self.siglip_loss_fn.state_dict(),
                 "epoch": epoch,
                 "best_metric": self.best_metric,
+                "metrics": metrics,
                 "config": OmegaConf.to_container(
                     self.config, resolve=True
                 ),
