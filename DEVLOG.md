@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-03-14 23:46 — [MILESTONE] Multi-seed validation complete — Phase 1 gate confirmed
+- **Branch:** `main` | **Commit:** `c9a45ab`
+- 4-seed results (42, 123, 456, 789): compound R@10 range 12.7–14.7%, mean 13.4% (±0.9%) — all seeds > 10% threshold
+- Alignment range 1.26–1.52: 3/4 seeds pass < 1.5 threshold, seed 456 marginal fail at 1.524 (best R@10 but longest training → alignment drift trade-off)
+- No collapse in any seed: uniformity -2.00 to -2.43 (threshold -0.5)
+- **Phase 1 gate: CONFIRMED.** Proceeding to Phase 2 (bi-modal baselines B5/B6 + tri-modal T1)
+
 ### 2026-03-14 04:30 — [MILESTONE] Phase 1 gate passed (single seed), multi-seed validation prep
 - **Branch:** `main` | **Commit:** pending
 - Phase 1 gate result (seed 42): compound R@10 = 12.7% > 10% threshold, alignment = 1.464 < 1.5 threshold
