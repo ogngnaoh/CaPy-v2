@@ -27,22 +27,25 @@ def main(config: DictConfig) -> None:
     # Seed all random sources
     seed_everything(config.seed)
 
-    # W&B init (optional)
-    try:
-        import wandb
+    # W&B init (opt-in via config.wandb=true or CLI wandb=true)
+    if config.get("wandb", False):
+        try:
+            import wandb
 
-        wandb.init(
-            project=config.project_name,
-            name=f"{config.model.name}_seed{config.seed}",
-            config=OmegaConf.to_container(config, resolve=True),
-            tags=[
-                f"config={config.model.name}",
-                f"seed={config.seed}",
-                "dataset=lincs",
-            ],
-        )
-    except ImportError:
-        logger.warning("wandb not available, skipping experiment tracking")
+            wandb.init(
+                project=config.project_name,
+                name=f"{config.model.name}_seed{config.seed}",
+                config=OmegaConf.to_container(config, resolve=True),
+                tags=[
+                    f"config={config.model.name}",
+                    f"seed={config.seed}",
+                    "dataset=lincs",
+                ],
+            )
+        except ImportError:
+            logger.warning("wandb not installed, skipping")
+    else:
+        logger.info("W&B disabled (set wandb=true to enable)")
 
     # Build dataloaders
     from src.data.dataset import build_dataloaders
@@ -163,13 +166,14 @@ def main(config: DictConfig) -> None:
     logger.info("Best metrics: %s", best_metrics)
 
     # Finish W&B
-    try:
-        import wandb
+    if config.get("wandb", False):
+        try:
+            import wandb
 
-        if wandb.run is not None:
-            wandb.finish()
-    except ImportError:
-        pass
+            if wandb.run is not None:
+                wandb.finish()
+        except ImportError:
+            pass
 
 
 if __name__ == "__main__":
