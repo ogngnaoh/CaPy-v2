@@ -90,6 +90,33 @@ class TestSigLIPLoss:
         loss_ba = siglip_loss(z_b, z_a)
         assert torch.allclose(loss_ab, loss_ba, atol=1e-6)
 
+    def test_multi_positive_reduces_loss_for_duplicates(self, siglip_loss):
+        """Compound-aware multi-positive should give lower loss when same-compound
+        pairs have identical embeddings (no longer penalized as negatives)."""
+        torch.manual_seed(42)
+        # 8 samples: 4 unique compounds, each appearing twice
+        z_base = f.normalize(torch.randn(4, 256), dim=-1)
+        z_a = z_base.repeat(2, 1)  # [8, 256] — pairs (0,4), (1,5), etc. are identical
+        z_b = z_base.repeat(2, 1)
+        compound_ids = ["A", "B", "C", "D", "A", "B", "C", "D"]
+
+        # Without compound_ids: identical duplicates treated as negatives → higher loss
+        loss_no_ids = siglip_loss(z_a, z_b).item()
+        # With compound_ids: identical duplicates treated as positives → lower loss
+        loss_with_ids = siglip_loss(z_a, z_b, compound_ids=compound_ids).item()
+        assert loss_with_ids < loss_no_ids
+
+    def test_multi_positive_unique_ids_matches_default(self, siglip_loss):
+        """When all compound_ids are unique, multi-positive matches default behavior."""
+        torch.manual_seed(42)
+        z_a = f.normalize(torch.randn(8, 256), dim=-1)
+        z_b = f.normalize(torch.randn(8, 256), dim=-1)
+        unique_ids = [f"compound_{i}" for i in range(8)]
+
+        loss_default = siglip_loss(z_a, z_b).item()
+        loss_unique = siglip_loss(z_a, z_b, compound_ids=unique_ids).item()
+        assert abs(loss_default - loss_unique) < 1e-5
+
 
 # ── VICReg tests (FR-6.2) ───────────────────────────────────
 

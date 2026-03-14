@@ -13,8 +13,12 @@ class SigLIPLoss(nn.Module):
     """SigLIP pairwise contrastive loss (FR-6.1).
 
     Computes: mean(-log_sigmoid(targets * (temperature * sim + bias)))
-    where targets[i,j] = +1 if i==j, -1 otherwise.
+    where targets[i,j] = +1 for positive pairs, -1 otherwise.
     Temperature and bias are learnable parameters (following SigLIP paper).
+
+    Supports compound-aware multi-positive pairing (OPEN-1): when compound_ids
+    are provided, all samples from the same compound are treated as positive
+    pairs, eliminating false negatives from dose-level duplication.
     """
 
     def __init__(
@@ -24,19 +28,36 @@ class SigLIPLoss(nn.Module):
         self.bias = nn.Parameter(torch.tensor(bias_init))
         self.log_temperature = nn.Parameter(torch.tensor(log_temp_init))
 
-    def forward(self, z_a: torch.Tensor, z_b: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        z_a: torch.Tensor,
+        z_b: torch.Tensor,
+        compound_ids: list[str] | None = None,
+    ) -> torch.Tensor:
         """Compute SigLIP loss between two sets of embeddings.
 
         Args:
             z_a: Embeddings of shape [N, 256], L2-normalized.
             z_b: Embeddings of shape [N, 256], L2-normalized.
+            compound_ids: Optional list of compound IDs per sample. When
+                provided, same-compound pairs are treated as positives.
 
         Returns:
             Scalar loss value.
         """
         sim = z_a @ z_b.T  # [N, N] cosine similarity (inputs are L2-normed)
         n = z_a.shape[0]
-        targets = 2 * torch.eye(n, device=z_a.device) - 1  # +1 diag, -1 off-diag
+
+        if compound_ids is not None:
+            # Multi-positive: same compound = positive pair (OPEN-1)
+            unique_ids = {cid: i for i, cid in enumerate(set(compound_ids))}
+            idx = torch.tensor(
+                [unique_ids[cid] for cid in compound_ids], device=z_a.device
+            )
+            targets = 2 * (idx.unsqueeze(1) == idx.unsqueeze(0)).float() - 1
+        else:
+            targets = 2 * torch.eye(n, device=z_a.device) - 1  # +1 diag, -1 off-diag
+
         temperature = self.log_temperature.exp().clamp(min=1.0, max=30.0)
         logits = targets * (temperature * sim + self.bias)
         return -f.logsigmoid(logits).mean()
@@ -82,6 +103,7 @@ def compute_total_loss(
     vicreg_loss_fn: VICRegLoss,
     vicreg_lambda: float = 0.1,
     encoder_outputs: dict[str, torch.Tensor] | None = None,
+    compound_ids: list[str] | None = None,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """Compute total loss for all active modality pairs (FR-6.3).
 
@@ -92,6 +114,7 @@ def compute_total_loss(
         vicreg_lambda: Weight for VICReg regularization terms.
         encoder_outputs: Dict of pre-projection encoder outputs (for VICReg).
             If None, falls back to embeddings (backward compat).
+        compound_ids: Optional list of compound IDs for multi-positive pairing.
 
     Returns:
         (total_loss, loss_dict) where loss_dict has individual components.
@@ -105,7 +128,9 @@ def compute_total_loss(
 
     # SigLIP for every pair of active modalities (on L2-normalized embeddings)
     for m_a, m_b in itertools.combinations(modalities, 2):
-        pair_loss = siglib_loss_fn(embeddings[m_a], embeddings[m_b])
+        pair_loss = siglib_loss_fn(
+            embeddings[m_a], embeddings[m_b], compound_ids
+        )
         loss_dict[f"loss_{m_a}_{m_b}"] = pair_loss.item()
         total_loss = total_loss + pair_loss
 

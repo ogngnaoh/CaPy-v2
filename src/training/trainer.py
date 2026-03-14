@@ -166,6 +166,11 @@ class Trainer:
 
             self.optimizer.zero_grad()
 
+            # Extract compound IDs for multi-positive SigLIP (OPEN-1)
+            compound_ids = None
+            if "metadata" in batch:
+                compound_ids = [m["compound_id"] for m in batch["metadata"]]
+
             with torch.autocast(
                 device_type=self.device.type,
                 dtype=self.amp_dtype,
@@ -178,6 +183,7 @@ class Trainer:
                     self.vicreg_loss_fn,
                     self.vicreg_lambda,
                     encoder_outputs=encoder_outputs,
+                    compound_ids=compound_ids,
                 )
 
             # NaN detection (FSD edge case 5.2)
@@ -243,6 +249,13 @@ class Trainer:
                     if isinstance(v, torch.Tensor)
                 }
 
+                # Extract compound IDs for multi-positive SigLIP
+                compound_ids = None
+                if "metadata" in batch:
+                    compound_ids = [
+                        m["compound_id"] for m in batch["metadata"]
+                    ]
+
                 with torch.autocast(
                     device_type=self.device.type,
                     dtype=self.amp_dtype,
@@ -255,6 +268,7 @@ class Trainer:
                         self.vicreg_loss_fn,
                         self.vicreg_lambda,
                         encoder_outputs=encoder_outputs,
+                        compound_ids=compound_ids,
                     )
 
                 for m in self.modalities:
