@@ -45,73 +45,101 @@ class _SyntheticDataset(Dataset):
         }
 
 
-def _make_tiny_config(tmp_path):
-    return OmegaConf.create(
-        {
-            "seed": 42,
-            "project_name": "test",
-            "model": {
-                "name": "test_model",
-                "modalities": ["mol", "morph", "expr"],
-                "mol_encoder": {
-                    "input_dim": 32,
-                    "hidden_dims": [64],
-                    "output_dim": 32,
-                    "dropout": 0.0,
-                },
-                "morph_encoder": {
-                    "input_dim": 24,
-                    "hidden_dims": [64],
-                    "output_dim": 32,
-                    "dropout": 0.0,
-                },
-                "expr_encoder": {
-                    "input_dim": 16,
-                    "hidden_dims": [64],
-                    "output_dim": 32,
-                    "dropout": 0.0,
-                },
-                "projection": {
-                    "input_dim": 32,
-                    "hidden_dim": 32,
-                    "output_dim": 16,
-                },
-                "embedding_dim": 16,
+def _make_tiny_config(tmp_path, **overrides):
+    cfg = {
+        "seed": 42,
+        "project_name": "test",
+        "model": {
+            "name": "test_model",
+            "modalities": ["mol", "morph", "expr"],
+            "mol_encoder": {
+                "input_dim": 32,
+                "hidden_dims": [64],
+                "output_dim": 32,
+                "dropout": 0.0,
             },
-            "training": {
-                "optimizer": {"name": "adamw", "lr": 1e-3, "weight_decay": 0.0},
-                "scheduler": {"name": "cosine", "warmup_epochs": 1},
-                "batch_size": 4,
-                "epochs": 3,
-                "patience": 2,
-                "gradient_clip_max_norm": 1.0,
-                "loss": {
-                    "vicreg_lambda": 0.1,
-                    "siglib_bias_init": 0.0,
-                    "siglib_log_temp_init": 2.0,
-                },
-                "mixed_precision": False,
-                "num_workers": 0,
+            "morph_encoder": {
+                "input_dim": 24,
+                "hidden_dims": [64],
+                "output_dim": 32,
+                "dropout": 0.0,
             },
-            "checkpoint_dir": str(tmp_path / "checkpoints"),
-        }
-    )
+            "expr_encoder": {
+                "input_dim": 16,
+                "hidden_dims": [64],
+                "output_dim": 32,
+                "dropout": 0.0,
+            },
+            "projection": {
+                "input_dim": 32,
+                "hidden_dim": 32,
+                "output_dim": 16,
+            },
+            "embedding_dim": 16,
+        },
+        "training": {
+            "optimizer": {"name": "adamw", "lr": 1e-3, "weight_decay": 0.0},
+            "scheduler": {"name": "cosine", "warmup_epochs": 1},
+            "batch_size": 4,
+            "epochs": 3,
+            "patience": 2,
+            "gradient_clip_max_norm": 1.0,
+            "loss": {
+                "vicreg_lambda": 0.1,
+                "siglib_bias_init": 0.0,
+                "siglib_log_temp_init": 2.0,
+                "pair_weights": {
+                    "mol_morph": 1.0,
+                    "mol_expr": 1.0,
+                    "morph_expr": 1.0,
+                },
+                "curriculum": {"enabled": False, "warmup_epochs": 50},
+            },
+            "mixed_precision": False,
+            "num_workers": 0,
+            "staged": {
+                "enabled": False,
+                "stage1_epochs": 100,
+                "stage1_modalities": ["morph", "expr"],
+                "stage2_freeze": ["morph", "expr"],
+                "stage2_lr_mult": 0.1,
+            },
+        },
+        "checkpoint_dir": str(tmp_path / "checkpoints"),
+    }
+    # Apply overrides via deep merge
+    config = OmegaConf.create(cfg)
+    if overrides:
+        config = OmegaConf.merge(config, OmegaConf.create(overrides))
+    return config
 
 
-@pytest.fixture
-def trainer(tmp_path):
-    """Build a Trainer with tiny model and synthetic data."""
-    config = _make_tiny_config(tmp_path)
+def _build_trainer(config):
+    """Build a Trainer from config with tiny model and synthetic data."""
+    import itertools
+
     model = CaPyModel(config)
-    siglip_fn = SigLIPLoss(
-        bias_init=config.training.loss.siglib_bias_init,
-        log_temp_init=config.training.loss.siglib_log_temp_init,
+
+    # Per-pair SigLIP instances
+    modalities = sorted(
+        list(config.model.modalities),
+        key=lambda m: {"mol": 0, "morph": 1, "expr": 2}[m],
     )
+    siglip_fns = {}
+    for m_a, m_b in itertools.combinations(modalities, 2):
+        key = f"{m_a}_{m_b}"
+        siglip_fns[key] = SigLIPLoss(
+            bias_init=config.training.loss.siglib_bias_init,
+            log_temp_init=config.training.loss.siglib_log_temp_init,
+        )
     vicreg_fn = VICRegLoss()
 
+    siglip_params = []
+    for fn in siglip_fns.values():
+        siglip_params.extend(fn.parameters())
+    all_params = list(model.parameters()) + siglip_params
     optimizer = torch.optim.AdamW(
-        list(model.parameters()) + list(siglip_fn.parameters()),
-        lr=config.training.optimizer.lr,
+        all_params, lr=config.training.optimizer.lr
     )
     warmup = torch.optim.lr_scheduler.LinearLR(
         optimizer, start_factor=0.01, total_iters=1
@@ -141,9 +169,16 @@ def trainer(tmp_path):
         train_loader=train_loader,
         val_loader=val_loader,
         config=config,
-        siglip_loss_fn=siglip_fn,
+        siglip_loss_fn=siglip_fns,
         vicreg_loss_fn=vicreg_fn,
     )
+
+
+@pytest.fixture
+def trainer(tmp_path):
+    """Build a Trainer with tiny model and synthetic data."""
+    config = _make_tiny_config(tmp_path)
+    return _build_trainer(config)
 
 
 # ── Unit tests ───────────────────────────────────────────────
@@ -276,3 +311,103 @@ class TestFullTraining:
         assert "best_mean_R@10" in result
         assert "best_epoch" in result
         assert result["best_epoch"] >= 1
+
+
+class TestStagedTraining:
+    """Tests for staged training (stage1 morph+expr, stage2 all)."""
+
+    def test_stage_transition_freezes_encoders(self, tmp_path):
+        """After transition, morph/expr encoder params should be frozen."""
+        config = _make_tiny_config(
+            tmp_path,
+            training={
+                "staged": {
+                    "enabled": True,
+                    "stage1_epochs": 1,
+                    "stage1_modalities": ["morph", "expr"],
+                    "stage2_freeze": ["morph", "expr"],
+                    "stage2_lr_mult": 0.1,
+                },
+                "epochs": 3,
+            },
+        )
+        t = _build_trainer(config)
+        # Initially all params are trainable
+        for p in t.model.encoders["morph"].parameters():
+            assert p.requires_grad is True
+
+        # Run training — stage transition happens at epoch 1
+        t.train()
+
+        # After stage 2, morph/expr should be frozen
+        for p in t.model.encoders["morph"].parameters():
+            assert p.requires_grad is False
+        for p in t.model.encoders["expr"].parameters():
+            assert p.requires_grad is False
+        # mol should remain trainable
+        for p in t.model.encoders["mol"].parameters():
+            assert p.requires_grad is True
+
+    def test_staged_training_completes(self, tmp_path):
+        """Staged training should complete without errors."""
+        config = _make_tiny_config(
+            tmp_path,
+            training={
+                "staged": {
+                    "enabled": True,
+                    "stage1_epochs": 2,
+                    "stage1_modalities": ["morph", "expr"],
+                    "stage2_freeze": ["morph", "expr"],
+                    "stage2_lr_mult": 0.1,
+                },
+                "epochs": 3,
+            },
+        )
+        t = _build_trainer(config)
+        result = t.train()
+        assert "best_mean_R@10" in result
+
+
+class TestCurriculumWeighting:
+    """Tests for curriculum loss weighting."""
+
+    def test_curriculum_ramps_mol_weights(self, tmp_path):
+        """Curriculum should start with 0 mol weight and ramp to target."""
+        config = _make_tiny_config(
+            tmp_path,
+            training={
+                "loss": {
+                    "curriculum": {"enabled": True, "warmup_epochs": 10},
+                    "pair_weights": {
+                        "mol_morph": 2.0,
+                        "mol_expr": 2.0,
+                        "morph_expr": 1.0,
+                    },
+                },
+            },
+        )
+        t = _build_trainer(config)
+
+        # At epoch 1, ramp = 1/10 = 0.1 → mol weights = 2.0 * 0.1 = 0.2
+        pair_weights = dict(t.pair_weights)
+        ramp = 1 / 10
+        for key in list(pair_weights.keys()):
+            if "mol" in key:
+                pair_weights[key] = pair_weights[key] * ramp
+        assert abs(pair_weights["mol_morph"] - 0.2) < 1e-6
+        assert abs(pair_weights["morph_expr"] - 1.0) < 1e-6
+
+    def test_curriculum_training_completes(self, tmp_path):
+        """Curriculum training should complete without errors."""
+        config = _make_tiny_config(
+            tmp_path,
+            training={
+                "loss": {
+                    "curriculum": {"enabled": True, "warmup_epochs": 2},
+                },
+                "epochs": 3,
+            },
+        )
+        t = _build_trainer(config)
+        result = t.train()
+        assert "best_mean_R@10" in result

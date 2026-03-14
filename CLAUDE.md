@@ -194,15 +194,17 @@ CaPy-v2/
 ### Loss
 
 ```
-L_total = SigLIP(emb_mol,emb_morph) + SigLIP(emb_mol,emb_expr) + SigLIP(emb_morph,emb_expr)
+L_total = w₁·SigLIP₁(emb_mol,emb_morph) + w₂·SigLIP₂(emb_mol,emb_expr) + w₃·SigLIP₃(emb_morph,emb_expr)
         + λ · (VICReg(enc_mol) + VICReg(enc_morph) + VICReg(enc_expr))
 ```
 
+Each SigLIP instance has its own learnable temperature and bias (per-pair).
 SigLIP operates on L2-normalized embeddings (post-projection).
 VICReg operates on encoder outputs (pre-projection, pre-normalization) —
 applying VICReg to L2-normalized vectors causes the variance hinge to saturate.
-SigLIP uses learnable temperature and bias: `logits = targets * (temp * sim + bias)`.
-λ = 0.1 (default). For bi-modal configs, only relevant pairs are included.
+w₁, w₂, w₃ = configurable pair weights (default 1.0). λ = 0.1 (default).
+For bi-modal configs, only relevant pairs are included.
+Curriculum mode linearly ramps mol-pair weights from 0 to target over warmup epochs.
 
 ### Training Hyperparameters
 
@@ -265,16 +267,24 @@ Use context7 MCP for up-to-date PyTorch, Hydra, and RDKit documentation.
 
 ## Current Phase
 
-**Phase 1 — Foundation** (Weeks 1–3) — **GATE PASSED** (single seed)
+**Phase 1 — Foundation** (Weeks 1–3) — **GATE PASSED** (multi-seed confirmed)
 
-Gate: Bi-modal mol↔morph compound-level R@10 > 10% AND alignment < 1.5
+Result (4 seeds): compound R@10 range 12.7–14.7%, mean 13.4% (±0.9%), all seeds > 10% threshold.
 
-Result (seed 42): compound R@10 = 12.7% (2.25x random), alignment = 1.464, no collapse (uniformity mol=-2.10, morph=-2.17)
+**Phase 2 — Tri-modal** (Weeks 4–6) — **GATE PASSED**
 
-Current focus: Multi-seed validation (seeds 123, 456, 789) to confirm robustness, then Phase 2.
+Gate: Tri-modal beats best bi-modal on at least one metric category.
 
-**Phase 2 — Tri-modal** (Weeks 4–6)
+Result: T1 morph↔expr compound R@10 = 84.8% vs B6 morph↔expr = 75.1% (+10pp). Adding mol helps morph↔expr alignment. However, mol-containing directions remain at ~12% (barely 2x random).
 
-Gate: Tri-modal beats best bi-modal on at least one metric category, OR clear pivot plan defined.
+**Current focus: Phase 2 Remediation** — Push mol-containing R@10 from ~12% toward 15-20%+.
 
-Next: Train B5 (Mol↔Expr), B6 (Morph↔Expr) bi-modal baselines, then T1 tri-modal (3 seeds).
+Infrastructure added for sweeps:
+- Per-pair SigLIP with independent temperature/bias per modality pair
+- Configurable pair weights (e.g. upweight mol pairs)
+- Discriminative learning rates per modality encoder
+- Staged training (morph↔expr first, then add mol with frozen phenotypic encoders)
+- Curriculum loss weighting (linear ramp of mol pair weights)
+- Per-direction R@10 logging for diagnosing asymmetric convergence
+
+Next: Sweep on Colab — per-pair SigLIP → loss weights → discriminative LR → curriculum → staged.

@@ -3,6 +3,10 @@ optimizer:
   name: adamw
   lr: 5.0e-4
   weight_decay: 1.0e-3
+  modality_lr_mult:  # Multipliers applied to base LR
+    mol: 1.0
+    morph: 1.0
+    expr: 1.0
 
 scheduler:
   name: cosine
@@ -17,6 +21,13 @@ loss:
   vicreg_lambda: 0.1
   siglib_bias_init: -10.0  # SigLIP paper default; ensures positive pairs start with high loss/gradient
   siglib_log_temp_init: 2.3  # exp(2.3) ≈ 10, matching SigLIP paper
+  pair_weights:
+    mol_morph: 1.0
+    mol_expr: 1.0
+    morph_expr: 1.0
+  curriculum:
+    enabled: false
+    warmup_epochs: 50  # Epochs to linearly ramp mol pair weights from 0 to target
 
 scarf:
   enabled: true
@@ -24,3 +35,10 @@ scarf:
 
 mixed_precision: true  # bfloat16 if CUDA available
 num_workers: 4
+
+staged:
+  enabled: false
+  stage1_epochs: 100
+  stage1_modalities: [morph, expr]
+  stage2_freeze: [morph, expr]
+  stage2_lr_mult: 0.1  # Reduce LR for unfrozen layers in stage 2

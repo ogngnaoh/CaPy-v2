@@ -99,22 +99,26 @@ class VICRegLoss(nn.Module):
 
 def compute_total_loss(
     embeddings: dict[str, torch.Tensor],
-    siglib_loss_fn: SigLIPLoss,
+    siglib_loss_fn: SigLIPLoss | dict[str, SigLIPLoss],
     vicreg_loss_fn: VICRegLoss,
     vicreg_lambda: float = 0.1,
     encoder_outputs: dict[str, torch.Tensor] | None = None,
     compound_ids: list[str] | None = None,
+    pair_weights: dict[str, float] | None = None,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """Compute total loss for all active modality pairs (FR-6.3).
 
     Args:
         embeddings: Dict of L2-normalized embeddings per active modality.
-        siglib_loss_fn: SigLIP loss function instance.
+        siglib_loss_fn: SigLIP loss function instance, or dict of per-pair
+            instances keyed by "m_a_m_b" (e.g. "mol_morph").
         vicreg_loss_fn: VICReg loss function instance.
         vicreg_lambda: Weight for VICReg regularization terms.
         encoder_outputs: Dict of pre-projection encoder outputs (for VICReg).
             If None, falls back to embeddings (backward compat).
         compound_ids: Optional list of compound IDs for multi-positive pairing.
+        pair_weights: Optional dict of weights per pair key (e.g.
+            {"mol_morph": 2.0}). Defaults to 1.0 for unspecified pairs.
 
     Returns:
         (total_loss, loss_dict) where loss_dict has individual components.
@@ -122,17 +126,23 @@ def compute_total_loss(
     loss_dict: dict[str, float] = {}
     device = next(iter(embeddings.values())).device
     total_loss = torch.tensor(0.0, device=device)
+    pair_weights = pair_weights or {}
 
     # Sort modalities by canonical order: mol, morph, expr
     modalities = sorted(embeddings.keys(), key=lambda m: _MODALITY_ORDER[m])
 
     # SigLIP for every pair of active modalities (on L2-normalized embeddings)
     for m_a, m_b in itertools.combinations(modalities, 2):
-        pair_loss = siglib_loss_fn(
-            embeddings[m_a], embeddings[m_b], compound_ids
-        )
+        pair_key = f"{m_a}_{m_b}"
+        # Look up per-pair SigLIP or use shared instance
+        if isinstance(siglib_loss_fn, dict):
+            loss_fn = siglib_loss_fn[pair_key]
+        else:
+            loss_fn = siglib_loss_fn
+        pair_loss = loss_fn(embeddings[m_a], embeddings[m_b], compound_ids)
+        weight = pair_weights.get(pair_key, 1.0)
         loss_dict[f"loss_{m_a}_{m_b}"] = pair_loss.item()
-        total_loss = total_loss + pair_loss
+        total_loss = total_loss + weight * pair_loss
 
     # VICReg per active modality (on pre-normalization encoder outputs)
     vicreg_inputs = encoder_outputs if encoder_outputs is not None else embeddings

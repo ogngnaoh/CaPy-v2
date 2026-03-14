@@ -87,20 +87,46 @@ def main(config: DictConfig) -> None:
     logger.info("Model: %s (%d parameters)", config.model.name, n_params)
 
     # Build loss functions
+    import itertools
+
     from src.models.losses import SigLIPLoss, VICRegLoss
 
-    siglip_loss_fn = SigLIPLoss(
-        bias_init=config.training.loss.siglib_bias_init,
-        log_temp_init=config.training.loss.siglib_log_temp_init,
+    # Create per-pair SigLIP instances (each gets own temp + bias)
+    modalities = sorted(
+        list(config.model.modalities),
+        key=lambda m: {"mol": 0, "morph": 1, "expr": 2}[m],
     )
+    siglip_loss_fns: dict[str, SigLIPLoss] = {}
+    for m_a, m_b in itertools.combinations(modalities, 2):
+        key = f"{m_a}_{m_b}"
+        siglip_loss_fns[key] = SigLIPLoss(
+            bias_init=config.training.loss.siglib_bias_init,
+            log_temp_init=config.training.loss.siglib_log_temp_init,
+        )
     vicreg_loss_fn = VICRegLoss()
 
-    # Build optimizer (model + SigLIP learnable bias)
-    all_params = list(model.parameters()) + list(siglip_loss_fn.parameters())
+    # Build optimizer with per-modality learning rates
+    modality_lr_mult = OmegaConf.to_container(
+        config.training.optimizer.get("modality_lr_mult", {}), resolve=True
+    )
+    param_groups = []
+    for m in modalities:
+        mult = modality_lr_mult.get(m, 1.0)
+        params = list(model.encoders[m].parameters()) + list(
+            model.projections[m].parameters()
+        )
+        param_groups.append(
+            {"params": params, "lr": config.training.optimizer.lr * mult}
+        )
+    # SigLIP params at base LR
+    siglip_params = []
+    for fn in siglip_loss_fns.values():
+        siglip_params.extend(fn.parameters())
+    param_groups.append(
+        {"params": siglip_params, "lr": config.training.optimizer.lr}
+    )
     optimizer = torch.optim.AdamW(
-        all_params,
-        lr=config.training.optimizer.lr,
-        weight_decay=config.training.optimizer.weight_decay,
+        param_groups, weight_decay=config.training.optimizer.weight_decay
     )
 
     # Build scheduler: linear warmup -> cosine decay
@@ -129,7 +155,7 @@ def main(config: DictConfig) -> None:
         train_loader=train_loader,
         val_loader=val_loader,
         config=config,
-        siglip_loss_fn=siglip_loss_fn,
+        siglip_loss_fn=siglip_loss_fns,
         vicreg_loss_fn=vicreg_loss_fn,
     )
     best_metrics = trainer.train()

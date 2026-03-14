@@ -39,7 +39,7 @@ class Trainer:
         train_loader,
         val_loader,
         config,
-        siglip_loss_fn: SigLIPLoss,
+        siglip_loss_fn: SigLIPLoss | dict[str, SigLIPLoss],
         vicreg_loss_fn: VICRegLoss,
     ) -> None:
         self.model = model
@@ -55,7 +55,12 @@ class Trainer:
             "cuda" if torch.cuda.is_available() else "cpu"
         )
         self.model.to(self.device)
-        self.siglip_loss_fn.to(self.device)
+        # Move SigLIP instance(s) to device
+        if isinstance(self.siglip_loss_fn, dict):
+            for fn in self.siglip_loss_fn.values():
+                fn.to(self.device)
+        else:
+            self.siglip_loss_fn.to(self.device)
 
         # Mixed precision (bfloat16 on CUDA only)
         self.use_amp = (
@@ -84,6 +89,21 @@ class Trainer:
         self.patience = config.training.patience
         self.modalities = list(config.model.modalities)
 
+        # Pair weights from config
+        pw_cfg = getattr(config.training.loss, "pair_weights", None)
+        self.pair_weights = (
+            OmegaConf.to_container(pw_cfg, resolve=True) if pw_cfg else {}
+        )
+
+        # Staged training config
+        self.staged = getattr(config.training, "staged", None)
+        self.stage = (
+            1 if (self.staged and self.staged.enabled) else None
+        )
+
+        # Curriculum config
+        self.curriculum = getattr(config.training.loss, "curriculum", None)
+
         # Step counter for W&B
         self.global_step = 0
 
@@ -106,6 +126,11 @@ class Trainer:
 
             # Scheduler step (per-epoch)
             self.scheduler.step()
+
+            # Stage transition for staged training
+            if self.stage == 1 and epoch >= self.staged.stage1_epochs:
+                self._transition_to_stage2()
+                self.stage = 2
 
             # W&B logging
             self._log_to_wandb(epoch, train_metrics, val_metrics)
@@ -162,6 +187,16 @@ class Trainer:
         epoch_losses: dict[str, float] = {}
         n_batches = 0
 
+        # Compute dynamic pair weights for curriculum
+        pair_weights = dict(self.pair_weights)
+        if self.curriculum and self.curriculum.enabled:
+            warmup = self.curriculum.warmup_epochs
+            if epoch <= warmup:
+                ramp = epoch / warmup  # 0→1 over warmup
+                for key in list(pair_weights.keys()):
+                    if "mol" in key:  # Only ramp mol-containing pairs
+                        pair_weights[key] = pair_weights[key] * ramp
+
         for batch in self.train_loader:
             batch_gpu = {
                 k: v.to(self.device)
@@ -182,6 +217,17 @@ class Trainer:
                 enabled=self.use_amp,
             ):
                 embeddings, encoder_outputs = self.model(batch_gpu)
+
+                # In stage 1, filter to stage1_modalities only
+                if self.stage == 1:
+                    stage1_mods = list(self.staged.stage1_modalities)
+                    embeddings = {
+                        m: embeddings[m] for m in stage1_mods
+                    }
+                    encoder_outputs = {
+                        m: encoder_outputs[m] for m in stage1_mods
+                    }
+
                 total_loss, loss_dict = compute_total_loss(
                     embeddings,
                     self.siglip_loss_fn,
@@ -189,6 +235,7 @@ class Trainer:
                     self.vicreg_lambda,
                     encoder_outputs=encoder_outputs,
                     compound_ids=compound_ids,
+                    pair_weights=pair_weights,
                 )
 
             # NaN detection (FSD edge case 5.2)
@@ -203,10 +250,11 @@ class Trainer:
             total_loss.backward()
 
             # Gradient clipping
+            all_params = list(self.model.parameters()) + list(
+                self._siglip_parameters()
+            )
             grad_norm = torch.nn.utils.clip_grad_norm_(
-                list(self.model.parameters())
-                + list(self.siglip_loss_fn.parameters()),
-                self.clip_max_norm,
+                all_params, self.clip_max_norm
             ).item()
 
             # Gradient explosion warning (FSD edge case 5.2)
@@ -276,6 +324,7 @@ class Trainer:
                         self.vicreg_lambda,
                         encoder_outputs=encoder_outputs,
                         compound_ids=compound_ids,
+                        pair_weights=self.pair_weights,
                     )
 
                 for m in self.modalities:
@@ -326,7 +375,64 @@ class Trainer:
             primary_r10,
             metrics.get("mean_R@10", 0.0),
         )
+
+        # Per-direction R@10 summary
+        dir_strs = []
+        for key, val in sorted(metrics.items()):
+            if key.startswith("compound/") and key.endswith("/R@10"):
+                parts = key.split("/")
+                if len(parts) == 3 and "->" in parts[1]:
+                    direction = parts[1]
+                    dir_strs.append(f"{direction}={val:.3f}")
+        if dir_strs:
+            logger.info(
+                "  Per-direction R@10: %s", " | ".join(dir_strs)
+            )
+
         return metrics
+
+    def _siglip_parameters(self) -> list:
+        """Collect all SigLIP parameters (works for both single and dict)."""
+        if isinstance(self.siglip_loss_fn, dict):
+            params = []
+            for fn in self.siglip_loss_fn.values():
+                params.extend(fn.parameters())
+            return params
+        return list(self.siglip_loss_fn.parameters())
+
+    def _siglip_state_dicts(self) -> dict:
+        """Get SigLIP state dict(s) for checkpointing."""
+        if isinstance(self.siglip_loss_fn, dict):
+            return {
+                k: fn.state_dict()
+                for k, fn in self.siglip_loss_fn.items()
+            }
+        return {"shared": self.siglip_loss_fn.state_dict()}
+
+    def _transition_to_stage2(self) -> None:
+        """Freeze stage1 encoders, enable all modalities for stage 2."""
+        for m in self.staged.stage2_freeze:
+            for p in self.model.encoders[m].parameters():
+                p.requires_grad_(False)
+            for p in self.model.projections[m].parameters():
+                p.requires_grad_(False)
+            logger.info("Froze encoder+projection: %s", m)
+
+        # Reduce LR for remaining trainable params
+        mult = self.staged.stage2_lr_mult
+        for pg in self.optimizer.param_groups:
+            pg["lr"] *= mult
+        logger.info(
+            "Stage 2: LR reduced by %.2fx for unfrozen params", mult
+        )
+
+        # Reset early stopping for stage 2
+        self.best_metric = -float("inf")
+        self.patience_counter = 0
+        logger.info(
+            "Stage transition complete at epoch %d",
+            self.staged.stage1_epochs,
+        )
 
     def save_checkpoint(self, epoch: int, metrics: dict) -> None:
         """Save model checkpoint (FR-7.2)."""
@@ -335,7 +441,7 @@ class Trainer:
                 "model_state_dict": self.model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "scheduler_state_dict": self.scheduler.state_dict(),
-                "siglip_state_dict": self.siglip_loss_fn.state_dict(),
+                "siglip_state_dicts": self._siglip_state_dicts(),
                 "epoch": epoch,
                 "best_metric": self.best_metric,
                 "metrics": metrics,

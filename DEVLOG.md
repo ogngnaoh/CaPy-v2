@@ -5,6 +5,23 @@
 
 ---
 
+### 2026-03-15 01:00 — [MILESTONE] Phase 2 gate PASSED + remediation infrastructure for weak mol directions
+- **Branch:** `main` | **Commit:** pending
+- **Phase 2 gate:** T1 morph↔expr compound R@10 = 84.8% vs B6 = 75.1% (+10pp). Adding mol helps morph↔expr but mol-containing directions stuck at ~12% (barely 2x random)
+- **Root causes:** shared SigLIP params across pairs with different similarity distributions, equal loss weighting (morph↔expr converges by epoch ~50 stealing gradient budget), uniform LR across modalities, no curriculum for hard mol pairs
+- **Infrastructure added (7 tasks):**
+  - Per-pair SigLIP with independent temperature/bias per modality pair (`src/models/losses.py`, `scripts/train.py`)
+  - Configurable pair weights with curriculum linear ramp for mol pairs (`src/training/trainer.py`, `configs/training/default.yaml`)
+  - Discriminative learning rates per modality encoder via `modality_lr_mult` config
+  - Staged training: stage1 morph↔expr only → stage2 freeze morph/expr + add mol (`configs/training/staged.yaml`)
+  - Per-direction R@10 logging in validation for diagnosing asymmetric convergence
+  - Extended raw-feature baselines for all 6 directions (`scripts/verify_signal.py`)
+  - Checkpoint analysis script for comparing per-direction metrics (`scripts/analyze_checkpoints.py`)
+- 160 tests passing (7 new: per-pair SigLIP, pair_weights scaling, zero-weight elimination, staged freeze, curriculum ramp, integration tests)
+- Updated CLAUDE.md (phase status, loss formula), capy_v2_prd.md (Phase 2 gate annotation)
+- **Next:** Sweep on Colab — per-pair SigLIP → loss weights → discriminative LR → curriculum → staged
+- Files: `src/models/losses.py`, `src/training/trainer.py`, `scripts/train.py`, `configs/training/default.yaml`, `configs/training/staged.yaml`, `scripts/analyze_checkpoints.py`, `scripts/verify_signal.py`, `tests/test_losses.py`, `tests/test_training.py`, `CLAUDE.md`, `capy_v2_prd.md`
+
 ### 2026-03-14 23:46 — [MILESTONE] Multi-seed validation complete — Phase 1 gate confirmed
 - **Branch:** `main` | **Commit:** `c9a45ab`
 - 4-seed results (42, 123, 456, 789): compound R@10 range 12.7–14.7%, mean 13.4% (±0.9%) — all seeds > 10% threshold

@@ -283,3 +283,90 @@ class TestTotalLoss:
         loss_raw = vicreg_loss(z_raw).item()
         # Unnormalized should have much lower loss (variance term near 0)
         assert loss_raw < loss_normed
+
+
+# ── Per-pair SigLIP + pair_weights tests ──────────────────
+
+
+class TestPerPairSigLIP:
+    """Tests for per-pair SigLIP dict support in compute_total_loss."""
+
+    def _make_embeddings(self, modalities, batch_size=16, dim=256):
+        return {
+            m: f.normalize(torch.randn(batch_size, dim), dim=-1)
+            for m in modalities
+        }
+
+    def _make_encoder_outputs(self, modalities, batch_size=16, dim=512):
+        return {m: torch.randn(batch_size, dim) for m in modalities}
+
+    def test_per_pair_matches_shared_with_identical_params(self):
+        """Per-pair SigLIP with identical params produces same result as shared."""
+        torch.manual_seed(42)
+        mods = ["mol", "morph", "expr"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+
+        # Shared instance
+        shared = SigLIPLoss(bias_init=0.0, log_temp_init=2.0)
+        loss_shared, dict_shared = compute_total_loss(
+            embeddings, shared, VICRegLoss(), encoder_outputs=enc_outputs
+        )
+
+        # Per-pair dict with identical params
+        per_pair = {
+            "mol_morph": SigLIPLoss(bias_init=0.0, log_temp_init=2.0),
+            "mol_expr": SigLIPLoss(bias_init=0.0, log_temp_init=2.0),
+            "morph_expr": SigLIPLoss(bias_init=0.0, log_temp_init=2.0),
+        }
+        loss_dict_val, dict_per_pair = compute_total_loss(
+            embeddings, per_pair, VICRegLoss(), encoder_outputs=enc_outputs
+        )
+
+        assert abs(dict_shared["loss_total"] - dict_per_pair["loss_total"]) < 1e-4
+
+    def test_pair_weights_scale_loss_components(self):
+        """pair_weights correctly scales loss components."""
+        torch.manual_seed(42)
+        mods = ["mol", "morph", "expr"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        siglip = SigLIPLoss()
+        vicreg = VICRegLoss()
+
+        # Default weights (all 1.0)
+        _, d1 = compute_total_loss(
+            embeddings, siglip, vicreg, encoder_outputs=enc_outputs
+        )
+        # Double mol_morph weight
+        _, d2 = compute_total_loss(
+            embeddings,
+            siglip,
+            vicreg,
+            encoder_outputs=enc_outputs,
+            pair_weights={"mol_morph": 2.0},
+        )
+        # Total should increase by exactly the mol_morph loss component
+        expected_diff = d1["loss_mol_morph"]
+        actual_diff = d2["loss_total"] - d1["loss_total"]
+        assert abs(actual_diff - expected_diff) < 1e-4
+
+    def test_pair_weights_zero_eliminates_contribution(self):
+        """pair_weights=0 for a pair means zero contribution to total loss."""
+        torch.manual_seed(42)
+        mods = ["mol", "morph"]
+        embeddings = self._make_embeddings(mods)
+        enc_outputs = self._make_encoder_outputs(mods)
+        siglip = SigLIPLoss()
+        vicreg = VICRegLoss()
+
+        _, d_zero = compute_total_loss(
+            embeddings,
+            siglip,
+            vicreg,
+            encoder_outputs=enc_outputs,
+            pair_weights={"mol_morph": 0.0},
+        )
+        # Total should equal just the VICReg terms
+        vicreg_sum = d_zero["vicreg_mol"] + d_zero["vicreg_morph"]
+        assert abs(d_zero["loss_total"] - vicreg_sum) < 1e-4
