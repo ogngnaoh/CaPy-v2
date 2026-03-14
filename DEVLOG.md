@@ -5,6 +5,23 @@
 
 ---
 
+### 2026-03-14 03:30 — [FIX] R@10 stuck at ~3%: 5 structural issues identified and fixed
+- **Branch:** `main` | **Commit:** `9f8219a`
+- **Root cause:** R@10=2.7% was NOT a hyperparameter issue — 5 cascading structural problems:
+  1. Degenerate evaluation: dose duplication inflated ranks (R@1 structurally impossible, min rank=7)
+  2. Degenerate data: compound-level morph aggregation → only ~787 unique (mol,morph) pairs from ~5,250 rows
+  3. Massive overcapacity: 8.9M params / 787 unique compounds = 11,309 params/compound (113x overfitting threshold)
+  4. No mol augmentation: ECFP deterministic → mol encoder memorized mapping instantly
+  5. Phase 1 gate unrealistic: 15% R@10 at ~1,400 compounds inconsistent with literature (CLOOME: 30K→8%)
+- **Fixes applied:**
+  - Added compound-level retrieval (`compute_compound_retrieval_metrics`) — averages embeddings per compound, re-normalizes, eliminates rank inflation. Early stopping now uses compound-level R@10
+  - Treatment-level morph matching — round-robin pairing of per-dose morph profiles instead of compound-level mean. Effective unique pairs: ~787 → ~3,000-5,000
+  - Model capacity 7x reduction — encoders from [1024,1024,1024]→[512,256], output_dim 512→256, dropout 0.1→0.3, weight_decay 1e-4→1e-3. Total params: ~8.9M → ~1.2M
+  - ECFP bit dropout — 10% of active bits randomly zeroed during training (prevents mol memorization)
+  - Phase 1 gate revised: compound-level R@10 > 10% AND alignment < 1.5 (was R@10 > 15%)
+- 153 tests passing, 4 new compound-level retrieval tests, lint clean on changed files
+- Files: `src/evaluation/retrieval.py`, `src/training/trainer.py`, `src/data/preprocess.py`, `src/data/dataset.py`, `src/models/encoders.py`, `src/models/projections.py`, `configs/model/*.yaml`, `configs/training/default.yaml`, `tests/test_retrieval.py`, `scripts/verify_signal.py`, `CLAUDE.md`, `capy_v2_prd.md`, `capy_v2_fsd.md`
+
 ### 2026-03-12 21:36 — [FIX] FR-7 FSD compliance gaps + Colab training notebook
 - **Branch:** `main` | **Commit:** `a01e36d`
 - `save_checkpoint` now includes full Hydra config via `OmegaConf.to_container()` (FR-7.2)

@@ -443,31 +443,45 @@ def match_treatments(
     morph_features = [
         c for c in morph_df.columns if c.startswith(_CELLPROFILER_PREFIXES)
     ]
-
-    # Aggregate morph to compound level (mean across doses/batches)
-    morph_agg = (
-        morph_df[morph_df["compound_id"].isin(overlap)]
-        .groupby("compound_id")[morph_features]
-        .mean()
-        .reset_index()
-    )
-    # Keep metadata from first row per compound
     meta_cols = [c for c in morph_df.columns if c.startswith(_METADATA_PREFIX)]
-    if meta_cols:
-        morph_meta = (
-            morph_df[morph_df["compound_id"].isin(overlap)]
-            .groupby("compound_id")[meta_cols]
-            .first()
-            .reset_index()
-        )
-        morph_agg = morph_agg.merge(morph_meta, on="compound_id", how="left")
 
-    # Filter expression to overlapping compounds
+    # Filter to overlapping compounds
+    morph_overlap = morph_df[morph_df["compound_id"].isin(overlap)].copy()
     expr_filtered = expr_df[expr_df["compound_id"].isin(overlap)].copy()
 
-    # Merge morph features onto each expression row (compound-level join)
-    merged = expr_filtered.merge(morph_agg, on="compound_id", how="inner")
-    logger.info("Merged morph+expr: %d rows", len(merged))
+    # Treatment-level pairing: assign morph profiles round-robin to expr rows
+    # This preserves per-dose/batch morph variation instead of averaging
+    keep_morph_cols = ["compound_id"] + morph_features + meta_cols
+    morph_keep = morph_overlap[
+        [c for c in keep_morph_cols if c in morph_overlap.columns]
+    ].reset_index(drop=True)
+
+    paired_rows = []
+    for cid in sorted(overlap):
+        expr_rows = expr_filtered[expr_filtered["compound_id"] == cid]
+        morph_rows = morph_keep[morph_keep["compound_id"] == cid]
+        n_expr = len(expr_rows)
+        n_morph = len(morph_rows)
+        if n_expr == 0 or n_morph == 0:
+            continue
+        # Round-robin: cycle morph profiles to match expr rows
+        morph_cols_no_id = [c for c in morph_rows.columns if c != "compound_id"]
+        morph_vals = morph_rows[morph_cols_no_id].values
+        for i, (_, expr_row) in enumerate(expr_rows.iterrows()):
+            morph_idx = i % n_morph
+            row = expr_row.to_dict()
+            for j, col in enumerate(morph_cols_no_id):
+                row[col] = morph_vals[morph_idx, j]
+            paired_rows.append(row)
+
+    merged = pd.DataFrame(paired_rows)
+    logger.info(
+        "Treatment-level morph pairing: %d rows (%d unique morph profiles "
+        "across %d compounds)",
+        len(merged),
+        len(morph_keep),
+        len(overlap),
+    )
 
     # Resolve SMILES
     if "compound_id" not in meta_df.columns and "broad_id" in meta_df.columns:

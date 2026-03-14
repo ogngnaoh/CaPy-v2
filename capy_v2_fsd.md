@@ -425,8 +425,10 @@ Behavior:
   6. Compute MRR: mean of `1/rank` of the correct match across all queries.
 - The system SHALL compute metrics for BOTH directions of each pair (a→b and b→a).
 - The system SHALL compute `mean_R@10` as the average R@10 across all computed directions.
+- The system SHALL compute compound-level retrieval metrics by averaging embeddings per compound, re-normalizing, then computing R@K on the deduplicated set. This eliminates rank inflation from dose duplication. Compound-level metrics use keys like `compound/mol->morph/R@10`, `compound/mean_R@10`.
+- Early stopping uses `compound/mean_R@10` as the primary metric (falls back to `mean_R@10` if compound IDs are unavailable).
 - The system SHALL return a dict with keys like `mol->morph/R@1`, `morph->mol/R@1`, etc.
-Verified when: For identical embeddings across modalities, R@1 = 1.0. For random embeddings with N=100, R@10 ≈ 0.10 (±0.03).
+Verified when: For identical embeddings across modalities, R@1 = 1.0. For random embeddings with N=100, R@10 ≈ 0.10 (±0.03). Compound-level R@1 = 1.0 for perfect alignment even when row-level R@1 < 1.0 due to dose duplication.
 
 **FR-8.2: Alignment and uniformity**
 Trigger: Called alongside retrieval evaluation.

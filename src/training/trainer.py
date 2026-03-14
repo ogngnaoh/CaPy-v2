@@ -7,7 +7,10 @@ import torch
 from omegaconf import OmegaConf
 
 from src.evaluation.diagnostics import compute_alignment, compute_uniformity
-from src.evaluation.retrieval import compute_all_retrieval_metrics
+from src.evaluation.retrieval import (
+    compute_all_compound_retrieval_metrics,
+    compute_all_retrieval_metrics,
+)
 from src.models.losses import SigLIPLoss, VICRegLoss, compute_total_loss
 from src.utils.logging import get_logger
 
@@ -107,8 +110,10 @@ class Trainer:
             # W&B logging
             self._log_to_wandb(epoch, train_metrics, val_metrics)
 
-            # Early stopping + checkpointing
-            mean_r10 = val_metrics.get("mean_R@10", 0.0)
+            # Early stopping + checkpointing (prefer compound-level metric)
+            mean_r10 = val_metrics.get(
+                "compound/mean_R@10", val_metrics.get("mean_R@10", 0.0)
+            )
             should_stop = self.check_early_stopping(mean_r10)
 
             # patience_counter == 0 means improvement was detected
@@ -238,6 +243,7 @@ class Trainer:
         all_embeddings: dict[str, list[torch.Tensor]] = {
             m: [] for m in self.modalities
         }
+        all_compound_ids: list[str] = []
         val_loss_sum = 0.0
         n_batches = 0
 
@@ -255,6 +261,7 @@ class Trainer:
                     compound_ids = [
                         m["compound_id"] for m in batch["metadata"]
                     ]
+                    all_compound_ids.extend(compound_ids)
 
                 with torch.autocast(
                     device_type=self.device.type,
@@ -279,8 +286,15 @@ class Trainer:
         # Concat embeddings
         all_emb = {m: torch.cat(tensors) for m, tensors in all_embeddings.items()}
 
-        # Retrieval metrics (FR-8.1)
+        # Row-level retrieval metrics (FR-8.1)
         retrieval_metrics = compute_all_retrieval_metrics(all_emb)
+
+        # Compound-level retrieval (deduped, primary metric)
+        compound_retrieval = {}
+        if all_compound_ids:
+            compound_retrieval = compute_all_compound_retrieval_metrics(
+                all_emb, all_compound_ids
+            )
 
         # Alignment + uniformity (FR-8.2)
         diagnostics: dict[str, float] = {}
@@ -296,14 +310,20 @@ class Trainer:
 
         metrics = {
             **retrieval_metrics,
+            **compound_retrieval,
             **diagnostics,
             "val_loss": val_loss_sum / max(n_batches, 1),
         }
 
+        # Use compound-level R@10 as primary metric if available
+        primary_r10 = metrics.get(
+            "compound/mean_R@10", metrics.get("mean_R@10", 0.0)
+        )
         logger.info(
-            "Epoch %d | val_loss=%.4f | mean_R@10=%.4f",
+            "Epoch %d | val_loss=%.4f | compound_R@10=%.4f | row_R@10=%.4f",
             epoch,
             metrics["val_loss"],
+            primary_r10,
             metrics.get("mean_R@10", 0.0),
         )
         return metrics

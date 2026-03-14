@@ -35,21 +35,21 @@ class _MLPEncoder(nn.Module):
 
 
 class MolecularEncoder(nn.Module):
-    """ECFP → 512-dim encoder (FR-5.3).
+    """ECFP → encoder (FR-5.3).
 
-    Architecture: [2048→1024→1024→1024→512] with BN, ReLU, Dropout.
+    Architecture: [2048→512→256→output_dim] with BN, ReLU, Dropout.
     """
 
     def __init__(
         self,
         input_dim: int = 2048,
-        output_dim: int = 512,
-        dropout: float = 0.1,
+        output_dim: int = 256,
+        dropout: float = 0.3,
         hidden_dims: list[int] | None = None,
     ) -> None:
         super().__init__()
         if hidden_dims is None:
-            hidden_dims = [1024, 1024, 1024]
+            hidden_dims = [512, 256]
         self.net = _MLPEncoder(input_dim, hidden_dims, output_dim, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -57,21 +57,21 @@ class MolecularEncoder(nn.Module):
 
 
 class MorphologyEncoder(nn.Module):
-    """CellProfiler features → 512-dim encoder (FR-5.1).
+    """CellProfiler features → encoder (FR-5.1).
 
-    Architecture: [~1500→1024→1024→512] with BN, ReLU, Dropout.
+    Architecture: [~1500→512→256→output_dim] with BN, ReLU, Dropout.
     """
 
     def __init__(
         self,
         input_dim: int = 1500,
-        output_dim: int = 512,
-        dropout: float = 0.1,
+        output_dim: int = 256,
+        dropout: float = 0.3,
         hidden_dims: list[int] | None = None,
     ) -> None:
         super().__init__()
         if hidden_dims is None:
-            hidden_dims = [1024, 1024]
+            hidden_dims = [512, 256]
         self.net = _MLPEncoder(input_dim, hidden_dims, output_dim, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -79,21 +79,21 @@ class MorphologyEncoder(nn.Module):
 
 
 class ExpressionEncoder(nn.Module):
-    """L1000 landmark genes → 512-dim encoder (FR-5.2).
+    """L1000 landmark genes → encoder (FR-5.2).
 
-    Architecture: [978→1024→1024→512] with BN, ReLU, Dropout.
+    Architecture: [978→512→256→output_dim] with BN, ReLU, Dropout.
     """
 
     def __init__(
         self,
         input_dim: int = 978,
-        output_dim: int = 512,
-        dropout: float = 0.1,
+        output_dim: int = 256,
+        dropout: float = 0.3,
         hidden_dims: list[int] | None = None,
     ) -> None:
         super().__init__()
         if hidden_dims is None:
-            hidden_dims = [1024, 1024]
+            hidden_dims = [512, 256]
         self.net = _MLPEncoder(input_dim, hidden_dims, output_dim, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

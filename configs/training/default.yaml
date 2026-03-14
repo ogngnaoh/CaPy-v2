@@ -2,7 +2,7 @@
 optimizer:
   name: adamw
   lr: 5.0e-4
-  weight_decay: 1.0e-4
+  weight_decay: 1.0e-3
 
 scheduler:
   name: cosine

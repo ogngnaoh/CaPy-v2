@@ -97,9 +97,10 @@ class CaPyDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         morph = self._morph_data[idx].clone()
         expr = self._expr_data[idx].clone()
-        mol = self._mol_data[idx]
+        mol = self._mol_data[idx].clone()
 
         if self._scarf_enabled:
+            mol = self._apply_ecfp_dropout(mol)
             morph = self._apply_scarf(morph, self._morph_data)
             expr = self._apply_scarf(expr, self._expr_data)
 
@@ -113,6 +114,16 @@ class CaPyDataset(Dataset):
                 "moa": self._moas[idx],
             },
         }
+
+    def _apply_ecfp_dropout(self, mol: torch.Tensor) -> torch.Tensor:
+        """Apply random bit dropout to ECFP fingerprints (10% of active bits)."""
+        nonzero_idx = mol.nonzero(as_tuple=True)[0]
+        n_nonzero = len(nonzero_idx)
+        n_drop = int(n_nonzero * 0.1)
+        if n_drop > 0:
+            drop_sel = torch.randperm(n_nonzero)[:n_drop]
+            mol[nonzero_idx[drop_sel]] = 0.0
+        return mol
 
     def _apply_scarf(
         self, x: torch.Tensor, data: torch.Tensor

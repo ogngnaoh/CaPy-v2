@@ -186,10 +186,10 @@ CaPy-v2/
 
 | Modality | Input | Architecture | Output |
 |----------|-------|-------------|--------|
-| Molecular | ECFP 2048-bit | MLP [2048→1024→1024→1024→512] + BN + ReLU + Dropout | 512-dim |
-| Morphology | ~1,500 CellProfiler features | MLP [~1500→1024→1024→512] + BN + ReLU + Dropout | 512-dim |
-| Expression | 978 L1000 landmark genes | MLP [978→1024→1024→512] + BN + ReLU + Dropout | 512-dim |
-| Projection | 512-dim encoder output | MLP [512→512→256] + L2-normalize | 256-dim (unit norm) |
+| Molecular | ECFP 2048-bit | MLP [2048→512→256→256] + BN + ReLU + Dropout(0.3) | 256-dim |
+| Morphology | ~1,500 CellProfiler features | MLP [~1500→512→256→256] + BN + ReLU + Dropout(0.3) | 256-dim |
+| Expression | 978 L1000 landmark genes | MLP [978→512→256→256] + BN + ReLU + Dropout(0.3) | 256-dim |
+| Projection | 256-dim encoder output | MLP [256→256→256] + L2-normalize | 256-dim (unit norm) |
 
 ### Loss
 
@@ -206,9 +206,9 @@ SigLIP uses learnable temperature and bias: `logits = targets * (temp * sim + bi
 
 ### Training Hyperparameters
 
-AdamW (weight_decay=1e-4), LR=5e-4, cosine annealing + 10-epoch warmup,
-batch_size=256–512, epochs=200, early_stopping patience=30 on val mean R@10,
-SCARF corruption=40%, gradient clip max_norm=1.0.
+AdamW (weight_decay=1e-3), LR=5e-4, cosine annealing + 10-epoch warmup,
+batch_size=256, epochs=200, early_stopping patience=30 on val compound-level mean R@10,
+SCARF corruption=40% (morph/expr) + ECFP 10% bit dropout (mol), gradient clip max_norm=1.0.
 
 ---
 
@@ -267,6 +267,6 @@ Use context7 MCP for up-to-date PyTorch, Hydra, and RDKit documentation.
 
 **Phase 1 — Foundation** (Weeks 1–3)
 
-Gate: Bi-modal mol↔morph beats random baseline (R@10 > 15%)
+Gate: Bi-modal mol↔morph compound-level R@10 > 10% (2x random at ~200 val compounds) AND alignment < 1.5
 
 Current focus: Data audit + repo scaffold → Encoders + evaluation → First bi-modal baseline.

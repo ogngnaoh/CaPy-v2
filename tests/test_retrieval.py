@@ -8,7 +8,9 @@ import torch.nn.functional as f
 
 from src.evaluation.diagnostics import compute_alignment, compute_uniformity
 from src.evaluation.retrieval import (
+    compute_all_compound_retrieval_metrics,
     compute_all_retrieval_metrics,
+    compute_compound_retrieval_metrics,
     compute_retrieval_metrics,
 )
 
@@ -75,6 +77,75 @@ class TestRetrievalMetrics:
         metrics = compute_all_retrieval_metrics({"mol": z, "morph": z.clone()})
         r10_keys = [k for k in metrics if k.endswith("/R@10")]
         assert len(r10_keys) == 2
+
+
+# ── Compound-level retrieval tests ────────────────────────────
+
+
+class TestCompoundRetrievalMetrics:
+    """Tests for compound-level retrieval (deduplication)."""
+
+    def test_dedup_removes_dose_inflation(self):
+        """Compound-level R@1 should be achievable when row-level is not."""
+        torch.manual_seed(42)
+        # 4 compounds, each with 3 doses = 12 rows
+        n_compounds = 4
+        n_doses = 3
+        compound_ids = []
+        for i in range(n_compounds):
+            compound_ids.extend([f"BRD-{i:04d}"] * n_doses)
+
+        # Perfect alignment: z_a[i] == z_b[i] for matched pairs
+        z_base = f.normalize(torch.randn(n_compounds, 256), dim=-1)
+        z_a = z_base.repeat_interleave(n_doses, dim=0)
+        z_b = z_base.repeat_interleave(n_doses, dim=0)
+
+        # Row-level: R@1 should be < 1.0 due to ties from identical doses
+        row_metrics = compute_retrieval_metrics(z_a, z_b)
+        assert row_metrics["R@1"] < 1.0
+
+        # Compound-level: R@1 should be 1.0 after dedup
+        compound_metrics = compute_compound_retrieval_metrics(
+            z_a, z_b, compound_ids
+        )
+        assert compound_metrics["R@1"] == pytest.approx(1.0)
+
+    def test_unique_ids_matches_row_level(self):
+        """When all compound_ids are unique, compound-level == row-level."""
+        torch.manual_seed(42)
+        n = 20
+        z_a = f.normalize(torch.randn(n, 256), dim=-1)
+        z_b = f.normalize(torch.randn(n, 256), dim=-1)
+        unique_ids = [f"BRD-{i:04d}" for i in range(n)]
+
+        row_metrics = compute_retrieval_metrics(z_a, z_b)
+        compound_metrics = compute_compound_retrieval_metrics(
+            z_a, z_b, unique_ids
+        )
+        assert compound_metrics["R@10"] == pytest.approx(
+            row_metrics["R@10"], abs=1e-6
+        )
+
+    def test_n_compounds_returned(self):
+        """Metrics should include n_compounds count."""
+        z = f.normalize(torch.randn(12, 256), dim=-1)
+        compound_ids = ["A", "A", "A", "B", "B", "B", "C", "C", "C", "D", "D", "D"]
+        metrics = compute_compound_retrieval_metrics(z, z, compound_ids)
+        assert metrics["n_compounds"] == 4.0
+
+    def test_all_compound_retrieval_keys(self):
+        """compute_all_compound_retrieval_metrics should produce expected keys."""
+        torch.manual_seed(42)
+        z = f.normalize(torch.randn(8, 256), dim=-1)
+        embeddings = {"mol": z, "morph": z.clone()}
+        compound_ids = ["A", "A", "B", "B", "C", "C", "D", "D"]
+        metrics = compute_all_compound_retrieval_metrics(
+            embeddings, compound_ids
+        )
+        assert "compound/mean_R@10" in metrics
+        assert "compound/random_R@10" in metrics
+        assert "compound/mol->morph/R@10" in metrics
+        assert "compound/morph->mol/R@10" in metrics
 
 
 # ── Diagnostics tests (FR-8.2) ──────────────────────────────

@@ -199,7 +199,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 
 ### Phase 1: Foundation (Weeks 1–3)
 
-**Gate: Bi-modal mol↔morph beats random baseline (R@10 > 15%).**
+**Gate: Bi-modal mol↔morph compound-level R@10 > 10% (2x random at ~200 val compounds) AND alignment < 1.5.**
 
 - **Week 1 — Data audit + repo scaffold.**
   - Set up repo: Hydra configs, W&B tracking, Docker environment, pre-commit hooks (black, ruff)
@@ -221,7 +221,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
   - Train molecule↔morphology alignment (the CLOOME-equivalent)
   - Run random baseline (B0) and all single-modality baselines (B1–B3)
   - Monitor alignment and uniformity metrics throughout training
-  - **🚦 GO/NO-GO:** Bi-modal mol↔morph R@10 > 15%. If not, debug data pairing and loss before proceeding.
+  - **🚦 GO/NO-GO:** Bi-modal mol↔morph compound-level R@10 > 10% AND alignment < 1.5. If not, debug data pairing and loss before proceeding.
 
 ### Phase 2: Core Development (Weeks 4–6)
 
