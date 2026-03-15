@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-03-15 02:10 — [MILESTONE] FR-9.2 implemented — Phase 3 blocking work complete
+- **Branch:** `main` | **Commit:** `4fe8d50`
+- Implemented `scripts/summarize_ablations.py`: CSV, LaTeX table, barplot from `results/ablation_runs.jsonl`
+- Welch's t-test (T1 vs B4/B5/B6) with Bonferroni correction (α=0.05/3)
+- Results: T1 compound mean R@10 = 36.76% ± 0.76%, all comparisons p < 1e-10 (***)
+- Added 11 tests in `tests/test_summarize.py`, full suite 187/187 passing
+- Notebook cell added after ablation matrix run cell
+
+---
+
 ### 2026-03-15 — [DECISION] Phase 2 remediation sweep complete — S2b locked as T1 config
 - **Branch:** `main` | **Commit:** pending
 - **Sweep results (7 configs, single seed each on Colab H100):**
