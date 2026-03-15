@@ -191,7 +191,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 - **D1: AWS S3 public access** to Cell Painting Gallery (cpg0004-lincs). No credentials needed (`--no-sign-request`).
 - **D2: Figshare access** for matched L1000 profiles. Public download, no credentials.
 - **D3: Drug Repurposing Hub** for SMILES metadata. Public download.
-- **D4: Google Colab H100 GPU.** Training takes <30 min per run on Colab H100 (80 GB HBM3); full 40-run ablation matrix takes ~20 GPU-hours. Code remains portable to T4/V100/A100.
+- **D4: Google Colab H100 GPU.** Training takes ~15 min per run on Colab H100 (80 GB HBM3); full 24-run ablation matrix takes ~5 GPU-hours. Code remains portable to T4/V100/A100.
 
 ---
 
@@ -228,6 +228,8 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 **Gate: Tri-modal beats best bi-modal on at least one per-direction metric category, OR clear pivot plan defined.**
 **PASSED:** T1 morph↔expr R@10 = 84.8% vs B6 = 75.1% (+10pp). Remediation sweep complete — best config S2b (per-pair SigLIP + 2x mol pair weights): compound mean R@10 = 37.3%, morph→expr = 88.7% (+13.6pp vs B6). Mol-containing directions ~11-14% (≈ bi-modal). Locked for Phase 3.
 
+**PARTIAL SUCCESS (per §4.1):** T1 compound mean R@10 = 36.8% ± 0.8% (>0.30 target). T1 morph↔expr = 88.4% vs B6 = 74.0% (+14pp, p < 1e-13). Mol-containing directions ~11.5% (ECFP ceiling, invariant across configs). Outcome: tri-modal significantly improves phenotype-phenotype alignment; mol-containing limited by encoder representation.
+
 - **Week 4 — All bi-modal pairs + tri-modal.**
   - Train B5 (Mol↔Expr) and B6 (Morph↔Expr)
   - Implement tri-modal loss (sum of 3 pairwise SigLIP + VICReg)
@@ -249,13 +251,13 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 
 ### Phase 3: Ablations & Rigor (Weeks 7–9)
 
-**Gate: Complete 40-run matrix with p-values for all key comparisons.**
+**Gate: Complete 24-run matrix with p-values for all key comparisons.**
 
 - **Week 7 — Full ablation execution.**
-  - Launch all 40 core runs (8 configs × 5 seeds) via Hydra multirun
+  - Launch all 24 core runs (4 baselines × 1 seed + 4 trained configs × 5 seeds)
   - Begin loss function ablation (SigLIP vs. DCL vs. InfoNCE)
   - Start downstream evaluation (linear probing on activity prediction)
-  - **Hard deliverable:** All 40 core experiments submitted and running
+  - **Hard deliverable:** All 24 core experiments submitted and running
 
 - **Week 8 — Statistical analysis.**
   - Compute Welch's t-test with Bonferroni correction for all key comparisons
@@ -410,7 +412,7 @@ Where λ = 0.1–0.25 (tuned in Week 6). For bi-modal ablations, drop the irrele
 | B6 | Morph↔Expr (bi-modal, trained) | Phenotype-phenotype alignment | 5 |
 | **T1** | **Mol↔Morph↔Expr (tri-modal, trained)** | **CaPy's core claim** | **5** |
 
-Total: 40 runs. ~20 GPU-hours at ~30 min/run.
+Total: 24 runs. B0-B3 evaluate in ~1 min (no training). B4-T1: ~15 min/run × 20 = ~5 GPU-hours on H100.
 
 ### C.2 Extended ablations (if time permits)
 

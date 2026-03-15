@@ -5,6 +5,35 @@
 
 ---
 
+### 2026-03-15 — [AUDIT] Phase 3 status correction & documentation alignment
+
+**What happened:** Deep audit revealed documentation-reality gaps. Fixed "40-run" references
+(PRD/FSD) to match actual 24-run config. Corrected CLAUDE.md phase status.
+
+**Actual Phase 3 status:**
+- 20/24 runs executed (B4-B6, T1 × 5 seeds). B0-B3 baselines coded but not yet run.
+- Statistical analysis complete: all T1 vs bi-modal comparisons p < 1e-10.
+- Ablation outputs generated: ablation_summary.csv, ablation_comparison.tex, ablation_barplot.png.
+- Full evaluation report generated: retrieval tables, UMAP plots, heatmaps, training curves.
+
+**Scientific outcome (PRD §4.1 — Partial Success):**
+- T1 compound mean R@10 = 36.8% ± 0.8% (passes 0.30+ target)
+- T1 morph↔expr = 88.4%/86.9% vs B6 = 74.0%/73.0% (+14pp, p < 1e-13)
+- T1 mol-containing = ~11.5% ≈ B4/B5 (ECFP ceiling, no tri-modal improvement)
+- Outcome: 2/6 directions improved (morph↔expr), 4/6 unchanged (mol-containing)
+- Meets partial success criterion but not clear success (would need ≥4/6 directions)
+
+**Remaining:** B0-B3 baselines (~1 min on Colab), then Phase 4.
+
+**Documentation fixes applied:**
+- PRD: "40 runs" → "24 runs" in §9 and Appendix C
+- FSD: "40 runs" → "24 runs" in FR-9.1
+- CLAUDE.md: Current Phase updated with accurate results and status
+- Notebook: Phase status updated, Cell 28 clarified
+- Memory: FR-9.2 status corrected (fully implemented, not a stub)
+
+---
+
 ### 2026-03-15 — [MILESTONE] FR-9.0 complete — B0-B3 baselines + FR-9.2 summary
 - **Branch:** `main`
 - Added `evaluate_baseline()` to `scripts/run_ablations.py`: B0 (random 256-dim embeddings), B1-B3 (raw features → random linear projection to 256-dim → cross-modal retrieval)

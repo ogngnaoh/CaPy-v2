@@ -69,15 +69,15 @@ make evaluate       # runs full evaluation suite on best checkpoint
 
 ### 3.2 Scenario: Hoang runs the full ablation matrix
 
-Hoang wants to execute all 40 runs (8 configs × 5 seeds) in the core ablation matrix:
+Hoang wants to execute all 24 runs (4 baselines × 1 seed + 4 trained × 5 seeds) in the core ablation matrix:
 
 ```
 python scripts/run_ablations.py --matrix core
 ```
 
-**Happy path:** The system launches runs sequentially (or via Hydra multirun if configured). Each run logs to W&B with tags `config=B4, seed=42`. After all 40 runs complete, the system generates `results/ablation_summary.csv` containing all metrics for all runs, and prints a comparison table to stdout showing mean ± std for each config across seeds.
+**Happy path:** The system launches runs sequentially (or via Hydra multirun if configured). Each run logs to W&B with tags `config=B4, seed=42`. After all 24 runs complete, the system generates `results/ablation_summary.csv` containing all metrics for all runs, and prints a comparison table to stdout showing mean ± std for each config across seeds.
 
-**Unhappy path — run 17 of 40 crashes:** The system logs which runs completed and which failed. On rerun with `--resume`, it skips completed runs (identified by config+seed matching existing checkpoints) and only runs the remaining ones.
+**Unhappy path — a run crashes mid-execution:** The system logs which runs completed and which failed. On rerun with `--resume`, it skips completed runs (identified by config+seed matching existing checkpoints) and only runs the remaining ones.
 
 ### 3.3 Scenario: Hoang investigates a failing modality pair
 
@@ -472,14 +472,14 @@ Verified when: All output files exist and are non-empty. The summary table conta
 Trigger: User runs `python scripts/run_ablations.py --matrix core`.
 Input: Ablation matrix definition in `configs/ablation/core.yaml`.
 Behavior:
-- The system SHALL read the matrix definition specifying 8 configs × 5 seeds = 40 runs.
+- The system SHALL read the matrix definition specifying 8 configs with variable seeds (4 baselines × 1 seed + 4 trained × 5 seeds = 24 runs).
 - For each run, the system SHALL:
   1. Check if a matching checkpoint exists (`checkpoints/{config}_{seed}.pt`). If yes and `--resume` flag is set, skip.
   2. Otherwise, execute `train.py` with the specified config overrides and seed.
   3. After training, execute `evaluate.py` on the best checkpoint.
   4. Append results to `results/ablation_runs.jsonl` (one JSON line per run).
-- The system SHALL print progress: "Run [X]/40: config=[name], seed=[S]. Status: [running/complete/skipped]."
-Verified when: After full execution, `results/ablation_runs.jsonl` has exactly 40 lines, each parseable as JSON with keys `config`, `seed`, `mean_R@10`, and all other metrics.
+- The system SHALL print progress: "Run [X]/24: config=[name], seed=[S]. Status: [running/complete/skipped]."
+Verified when: After full execution, `results/ablation_runs.jsonl` has exactly 24 lines, each parseable as JSON with keys `config`, `seed`, `mean_R@10`, and all other metrics.
 
 **FR-9.2: Ablation summary generation**
 Trigger: User runs `python scripts/summarize_ablations.py` or automatically after FR-9.1 completes.
@@ -595,7 +595,7 @@ Verified when: Running with `--quiet` suppresses INFO messages. Running with `--
 
 | Constraint | Specification | Rationale |
 |-----------|--------------|-----------|
-| Single training run time | SHALL complete in ≤30 minutes on a Google Colab H100 GPU | 40-run matrix must finish in ~1 day |
+| Single training run time | SHALL complete in ≤30 minutes on a Google Colab H100 GPU | 24-run matrix must finish in ~1 day |
 | Peak GPU memory | SHALL not exceed 16 GB for batch_size=128 | Compatible with Colab H100 (80 GB HBM3); constraint kept conservative for portability to T4/V100 |
 | Data download | SHALL complete in ≤30 minutes on a 100 Mbps connection | ~350 MB total download |
 | Reproducibility | Two identical runs SHALL produce identical val metrics (±1e-5) | Scientific rigor requirement |
