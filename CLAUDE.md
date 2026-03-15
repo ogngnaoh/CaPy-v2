@@ -164,7 +164,7 @@ CaPy-v2/
 │   ├── train.py                     # make train entry point
 │   ├── evaluate.py                  # make evaluate entry point
 │   ├── run_ablations.py             # FR-9.1: ablation harness
-│   ├── summarize_ablations.py       # FR-9.2: ablation summary (STUB)
+│   ├── summarize_ablations.py       # FR-9.2: ablation summary
 │   ├── verify_signal.py             # Raw-feature baselines (6 directions)
 │   ├── analyze_checkpoints.py       # Compare per-direction metrics across checkpoints
 │   └── diagnose.py                  # Diagnostic utility
@@ -178,7 +178,9 @@ CaPy-v2/
 │   ├── test_featurize.py
 │   ├── test_training.py
 │   ├── test_clustering.py
-│   └── test_report.py
+│   ├── test_report.py
+│   ├── test_summarize.py
+│   └── test_ablations.py
 ├── data/
 │   ├── raw/{morphology,expression,metadata}/  # Downloaded (gitignored)
 │   ├── processed/                              # QC'd + normalized (gitignored)
@@ -303,6 +305,6 @@ S2b results (single seed): compound mean R@10 = 37.3% (6.6x random). morph→exp
 
 **Current focus: Phase 3 — Ablations & Rigor.** Run 40-run ablation matrix (8 configs × 5 seeds), statistical analysis, complementarity analysis.
 
-**FR status:** FR-1 through FR-8 complete. FR-9.1 (ablation harness) complete. FR-9.2 (summarize_ablations.py) is a STUB — implement after Phase 3 matrix completes. FR-10/11 (config/logging utils) complete.
+**FR status:** FR-1 through FR-9 complete. FR-9.1 (ablation harness with B0-B3 baselines). FR-9.2 (summary CSV, LaTeX, barplot, t-tests). FR-10/11 (config/logging utils) complete.
 
-Next: `python scripts/run_ablations.py --matrix core` on Colab → implement FR-9.2 → p-values → Phase 4 (report).
+Next: Run `python3 scripts/run_ablations.py --matrix core --resume` on Colab → `python3 scripts/summarize_ablations.py` → Phase 4 (report).

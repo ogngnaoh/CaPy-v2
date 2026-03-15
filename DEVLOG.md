@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-03-15 — [MILESTONE] FR-9.0 complete — B0-B3 baselines + FR-9.2 summary
+- **Branch:** `main`
+- Added `evaluate_baseline()` to `scripts/run_ablations.py`: B0 (random 256-dim embeddings), B1-B3 (raw features → random linear projection to 256-dim → cross-modal retrieval)
+- B1-B3 use modality-specific `compound/mean_R@10` (average of 4 directions involving the baseline's modality)
+- Resume support: `--resume` skips baselines already in JSONL
+- 12 new tests in `tests/test_ablations.py`, 199/199 total passing
+- FR-9.2 committed earlier: CSV, LaTeX, barplot, Welch's t-tests with Bonferroni correction
+
+---
+
 ### 2026-03-15 02:10 — [MILESTONE] FR-9.2 implemented — Phase 3 blocking work complete
 - **Branch:** `main` | **Commit:** `4fe8d50`
 - Implemented `scripts/summarize_ablations.py`: CSV, LaTeX table, barplot from `results/ablation_runs.jsonl`
