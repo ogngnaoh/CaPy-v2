@@ -5,6 +5,31 @@
 
 ---
 
+### 2026-03-15 — [DECISION] Phase 2 remediation sweep complete — S2b locked as T1 config
+- **Branch:** `main` | **Commit:** pending
+- **Sweep results (7 configs, single seed each on Colab H100):**
+  - S1 per-pair SigLIP baseline: mean R@10=36.4%, morph↔expr recovered to 84-86% (vs 65-67% with shared SigLIP)
+  - **S2b per-pair SigLIP + 2x mol weights: mean R@10=37.3%, morph→expr=88.7%, expr→morph=87.0%** ← BEST
+  - S2c 3x mol weights: mean R@10=37.0%, diminishing returns on mol, same morph↔expr
+  - S3a discriminative LR (mol 2x): best mol→expr=14.1%, but morph↔expr drops to 80%
+  - S3b discriminative LR (mol 3x): morph↔expr drops further to 73%, net worse
+  - S4 curriculum: mol→morph=15.3% (best), but morph↔expr drops to 83%
+  - S5 staged: worst overall, freezing phenotypic encoders hurts morph↔expr badly (65%)
+- **Key finding:** Per-pair SigLIP is the single biggest improvement (+20pp morph↔expr recovery). 2x mol weight gives marginal additional gains. Mol-containing directions capped at ~12-14% regardless of training strategy — ECFP representation is the ceiling.
+- **Decision:** Lock S2b (per-pair SigLIP + mol pair weights 2.0) as default T1 config for Phase 3 ablation matrix
+- **Phase 2 remediation: COMPLETE.** Partial success per PRD 4.1 — tri-modal improves morph↔expr by +13pp over B6
+- Updated: `configs/training/default.yaml` (pair_weights mol=2.0), `CLAUDE.md` (phase status), `capy_v2_prd.md` (Phase 2 annotation)
+
+### 2026-03-15 — [MILESTONE] FR-8.0 evaluation suite complete (FR-8.3 + FR-8.4 + CLI)
+- **Branch:** `main` | **Commit:** `d2a30f7`
+- FR-8.3 MOA clustering (`src/evaluation/clustering.py`): k-NN accuracy (k=5,10,20 majority vote), AMI, ARI via k-means, null MOA filtering, single-class edge case
+- FR-8.4 full report (`src/evaluation/report.py`): checkpoint loading, embedding generation, retrieval table (CSV+LaTeX), UMAP plots per modality, similarity heatmap, training curves from epoch_history, formatted summary table
+- CLI (`scripts/evaluate.py`): `--full`, `--diagnostics`, `--clustering` modes with `--data-dir` and `--output-dir` flags
+- Trainer `epoch_history` added to `src/training/trainer.py` (3 lines) for training curve plots
+- 16 new tests (8 clustering + 8 report), 176 total passing, lint clean
+- **Remaining stub:** FR-9.2 `scripts/summarize_ablations.py` — not needed until Phase 3 ablation matrix completes
+- Files: `src/evaluation/clustering.py`, `src/evaluation/report.py`, `scripts/evaluate.py`, `src/training/trainer.py`, `tests/test_clustering.py`, `tests/test_report.py`
+
 ### 2026-03-15 01:00 — [MILESTONE] Phase 2 gate PASSED + remediation infrastructure for weak mol directions
 - **Branch:** `main` | **Commit:** pending
 - **Phase 2 gate:** T1 morph↔expr compound R@10 = 84.8% vs B6 = 75.1% (+10pp). Adding mol helps morph↔expr but mol-containing directions stuck at ~12% (barely 2x random)

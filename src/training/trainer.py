@@ -107,6 +107,9 @@ class Trainer:
         # Step counter for W&B
         self.global_step = 0
 
+        # Epoch history for training curves (FR-8.4)
+        self.epoch_history: list[dict] = []
+
         # VICReg persistence tracking (Edge 5.2)
         self._vicreg_high_epochs: dict[str, int] = {}
 
@@ -131,6 +134,11 @@ class Trainer:
             if self.stage == 1 and epoch >= self.staged.stage1_epochs:
                 self._transition_to_stage2()
                 self.stage = 2
+
+            # Record epoch history for training curves
+            self.epoch_history.append(
+                {"epoch": epoch, **train_metrics, **val_metrics}
+            )
 
             # W&B logging
             self._log_to_wandb(epoch, train_metrics, val_metrics)
@@ -448,6 +456,7 @@ class Trainer:
                 "config": OmegaConf.to_container(
                     self.config, resolve=True
                 ),
+                "epoch_history": self.epoch_history,
             },
             self.checkpoint_path,
         )

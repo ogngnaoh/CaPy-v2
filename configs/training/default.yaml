@@ -22,8 +22,8 @@ loss:
   siglib_bias_init: -10.0  # SigLIP paper default; ensures positive pairs start with high loss/gradient
   siglib_log_temp_init: 2.3  # exp(2.3) ≈ 10, matching SigLIP paper
   pair_weights:
-    mol_morph: 1.0
-    mol_expr: 1.0
+    mol_morph: 2.0
+    mol_expr: 2.0
     morph_expr: 1.0
   curriculum:
     enabled: false

@@ -202,9 +202,9 @@ Each SigLIP instance has its own learnable temperature and bias (per-pair).
 SigLIP operates on L2-normalized embeddings (post-projection).
 VICReg operates on encoder outputs (pre-projection, pre-normalization) —
 applying VICReg to L2-normalized vectors causes the variance hinge to saturate.
-w₁, w₂, w₃ = configurable pair weights (default 1.0). λ = 0.1 (default).
-For bi-modal configs, only relevant pairs are included.
-Curriculum mode linearly ramps mol-pair weights from 0 to target over warmup epochs.
+w₁ = w₂ = 2.0 (mol pairs), w₃ = 1.0 (morph↔expr). λ = 0.1.
+For bi-modal configs, only the relevant pair is included (weight = 1.0).
+Curriculum mode (disabled by default) linearly ramps mol-pair weights from 0 to target over warmup epochs.
 
 ### Training Hyperparameters
 
@@ -277,14 +277,10 @@ Gate: Tri-modal beats best bi-modal on at least one metric category.
 
 Result: T1 morph↔expr compound R@10 = 84.8% vs B6 morph↔expr = 75.1% (+10pp). Adding mol helps morph↔expr alignment. However, mol-containing directions remain at ~12% (barely 2x random).
 
-**Current focus: Phase 2 Remediation** — Push mol-containing R@10 from ~12% toward 15-20%+.
+**Phase 2 Remediation — COMPLETE.** Sweep of 7 configs on Colab (per-pair SigLIP, loss weights, discriminative LR, curriculum, staged). Best config: **S2b (per-pair SigLIP + 2x mol pair weights)**.
 
-Infrastructure added for sweeps:
-- Per-pair SigLIP with independent temperature/bias per modality pair
-- Configurable pair weights (e.g. upweight mol pairs)
-- Discriminative learning rates per modality encoder
-- Staged training (morph↔expr first, then add mol with frozen phenotypic encoders)
-- Curriculum loss weighting (linear ramp of mol pair weights)
-- Per-direction R@10 logging for diagnosing asymmetric convergence
+S2b results (single seed): compound mean R@10 = 37.3% (6.6x random). morph→expr = 88.7% (+13.6pp vs B6), expr→morph = 87.0% (+13.0pp vs B6). Mol-containing directions ~11-14% (≈ bi-modal baselines). Locked as default T1 config.
 
-Next: Sweep on Colab — per-pair SigLIP → loss weights → discriminative LR → curriculum → staged.
+**Current focus: Phase 3 — Ablations & Rigor.** Run 40-run ablation matrix (8 configs × 5 seeds), statistical analysis, complementarity analysis.
+
+Next: `python scripts/run_ablations.py --matrix core` on Colab → `scripts/summarize_ablations.py` → p-values.

@@ -226,7 +226,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 ### Phase 2: Core Development (Weeks 4–6)
 
 **Gate: Tri-modal beats best bi-modal on at least one per-direction metric category, OR clear pivot plan defined.**
-**PASSED:** T1 morph↔expr R@10 = 84.8% vs B6 = 75.1% (+10pp). Mol-containing directions at ~12% — remediation sweep in progress.
+**PASSED:** T1 morph↔expr R@10 = 84.8% vs B6 = 75.1% (+10pp). Remediation sweep complete — best config S2b (per-pair SigLIP + 2x mol pair weights): compound mean R@10 = 37.3%, morph→expr = 88.7% (+13.6pp vs B6). Mol-containing directions ~11-14% (≈ bi-modal). Locked for Phase 3.
 
 - **Week 4 — All bi-modal pairs + tri-modal.**
   - Train B5 (Mol↔Expr) and B6 (Morph↔Expr)
