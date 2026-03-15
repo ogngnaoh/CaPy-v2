@@ -4,9 +4,6 @@ data/processed/
 
 # Outputs
 checkpoints/
-results/
-outputs/
-multirun/
 
 # Python
 *.pyc
