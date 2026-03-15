@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 import torch
 
-from scripts.run_ablations import evaluate_baseline, load_existing_configs
+from scripts.run_ablations import evaluate_baseline, load_existing_runs
 
 
 @pytest.fixture
@@ -147,30 +147,33 @@ class TestBaselineWritesJsonl:
         json.dumps(result)  # Ensure serializable
 
 
-class TestResumeSkipsBaselines:
+class TestResumeSkipsExistingRuns:
     def test_resume_skips_existing(self, tmp_path):
-        """load_existing_configs returns config IDs from JSONL."""
+        """load_existing_runs returns (config, seed) pairs from JSONL."""
         jsonl_path = tmp_path / "ablation_runs.jsonl"
         entries = [
             {"config": "B0", "seed": 42, "compound/mean_R@10": 0.05},
             {"config": "B4", "seed": 42, "compound/mean_R@10": 0.12},
+            {"config": "B4", "seed": 123, "compound/mean_R@10": 0.13},
         ]
         with open(jsonl_path, "w") as f:
             for entry in entries:
                 f.write(json.dumps(entry) + "\n")
 
-        existing = load_existing_configs(jsonl_path)
-        assert "B0" in existing
-        assert "B4" in existing
-        assert "B1" not in existing
+        existing = load_existing_runs(jsonl_path)
+        assert ("B0", 42) in existing
+        assert ("B4", 42) in existing
+        assert ("B4", 123) in existing
+        assert ("B1", 42) not in existing
+        assert ("B4", 456) not in existing
 
     def test_empty_file_returns_empty_set(self, tmp_path):
         jsonl_path = tmp_path / "ablation_runs.jsonl"
         jsonl_path.write_text("")
-        existing = load_existing_configs(jsonl_path)
+        existing = load_existing_runs(jsonl_path)
         assert len(existing) == 0
 
     def test_nonexistent_file_returns_empty_set(self, tmp_path):
         jsonl_path = tmp_path / "does_not_exist.jsonl"
-        existing = load_existing_configs(jsonl_path)
+        existing = load_existing_runs(jsonl_path)
         assert len(existing) == 0

@@ -65,16 +65,16 @@ def build_run_list(
     return runs
 
 
-def load_existing_configs(results_path: Path) -> set[str]:
-    """Load config IDs already present in the JSONL file."""
-    existing = set()
+def load_existing_runs(results_path: Path) -> set[tuple[str, int]]:
+    """Load (config, seed) pairs already present in the JSONL file."""
+    existing: set[tuple[str, int]] = set()
     if results_path.exists():
         with open(results_path) as f:
             for line in f:
                 line = line.strip()
                 if line:
                     entry = json.loads(line)
-                    existing.add(entry.get("config", ""))
+                    existing.add((entry.get("config", ""), entry.get("seed", 0)))
     return existing
 
 
@@ -288,8 +288,8 @@ def main() -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
     results_path = results_dir / "ablation_runs.jsonl"
 
-    # Load existing config IDs for --resume support
-    existing_configs = load_existing_configs(results_path) if args.resume else set()
+    # Load existing (config, seed) pairs for --resume support
+    existing_runs = load_existing_runs(results_path) if args.resume else set()
 
     completed = 0
     skipped = 0
@@ -304,7 +304,7 @@ def main() -> None:
         # Baselines (B0-B3) don't train — evaluate raw features / random embeddings
         if model is None:
             # Resume: skip if already evaluated
-            if args.resume and config_id in existing_configs:
+            if args.resume and (config_id, seed) in existing_runs:
                 logger.info(
                     "Run %d/%d: config=%s, seed=%d. Status: skipped (baseline exists)",
                     i,
@@ -342,16 +342,27 @@ def main() -> None:
 
         checkpoint_path = checkpoint_dir / f"{name}_seed{seed}.pt"
 
-        # Check for existing checkpoint
-        if args.resume and checkpoint_path.exists():
+        # Skip if already in JSONL results
+        if args.resume and (config_id, seed) in existing_runs:
             logger.info(
-                "Run %d/%d: config=%s, seed=%d. Status: skipped (exists)",
+                "Run %d/%d: config=%s, seed=%d. Status: skipped (in JSONL)",
                 i,
                 total,
                 config_id,
                 seed,
             )
-            # Still collect metrics from existing checkpoint
+            skipped += 1
+            continue
+
+        # Skip training if checkpoint exists, but still collect metrics
+        if args.resume and checkpoint_path.exists():
+            logger.info(
+                "Run %d/%d: config=%s, seed=%d. Status: skipped (checkpoint exists)",
+                i,
+                total,
+                config_id,
+                seed,
+            )
             try:
                 metrics = extract_metrics_from_checkpoint(checkpoint_path)
                 run_result = {
