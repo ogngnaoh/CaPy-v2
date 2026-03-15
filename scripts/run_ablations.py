@@ -288,6 +288,23 @@ def main() -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
     results_path = results_dir / "ablation_runs.jsonl"
 
+    # Validate processed data exists before starting
+    processed_dir = Path(args.processed_dir)
+    required_files = [
+        processed_dir / "val.parquet",
+        processed_dir / "feature_columns.json",
+    ]
+    missing = [f for f in required_files if not f.exists()]
+    if missing:
+        logger.error(
+            "Processed data not found. Run preprocessing first:\n"
+            "  python3 scripts/download.py\n"
+            "  python3 scripts/preprocess.py\n"
+            "Missing: %s",
+            ", ".join(str(f) for f in missing),
+        )
+        sys.exit(1)
+
     # Load existing (config, seed) pairs for --resume support
     existing_runs = load_existing_runs(results_path) if args.resume else set()
 

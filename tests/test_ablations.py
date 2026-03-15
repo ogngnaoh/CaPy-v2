@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 import torch
 
-from scripts.run_ablations import evaluate_baseline, load_existing_runs
+from scripts.run_ablations import evaluate_baseline, load_existing_runs, main
 
 
 @pytest.fixture
@@ -177,3 +177,21 @@ class TestResumeSkipsExistingRuns:
         jsonl_path = tmp_path / "does_not_exist.jsonl"
         existing = load_existing_runs(jsonl_path)
         assert len(existing) == 0
+
+
+class TestMainExitsOnMissingData:
+    def test_main_exits_on_missing_data(self, tmp_path, monkeypatch):
+        """main() should exit with code 1 when processed data is missing."""
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "run_ablations.py",
+                "--matrix",
+                "core",
+                "--processed-dir",
+                str(tmp_path),
+            ],
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code == 1
