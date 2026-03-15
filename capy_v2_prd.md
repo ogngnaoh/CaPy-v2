@@ -91,7 +91,7 @@ Three MLP encoders (ECFP molecular fingerprints, CellProfiler features, L1000 z-
 WHY: SigLIP eliminates InfoNCE's batch-size sensitivity; VICReg prevents the encoder collapse observed in v1.
 
 **F3: 8-condition ablation matrix.**
-Random, 3 single-modality, 3 bi-modal, 1 tri-modal — each with 5 seeds (40 total runs).
+Random, 3 single-modality, 3 bi-modal, 1 tri-modal — 4 baselines × 1 seed + 4 trained × 5 seeds (24 total runs).
 WHY: This is the core scientific contribution; no published work has done systematic tri vs. bi comparison.
 
 **F4: Comprehensive evaluation suite.**
@@ -252,6 +252,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 ### Phase 3: Ablations & Rigor (Weeks 7–9)
 
 **Gate: Complete 24-run matrix with p-values for all key comparisons.**
+**PASSED:** 24/24 runs complete. Welch's t-test T1 vs B4/B5/B6 all p < 1e-10. Ablation outputs: CSV, LaTeX, barplot. Full evaluation report generated.
 
 - **Week 7 — Full ablation execution.**
   - Launch all 24 core runs (4 baselines × 1 seed + 4 trained configs × 5 seeds)

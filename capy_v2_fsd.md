@@ -41,7 +41,7 @@ CaPy v2 is a Python command-line research framework that trains contrastive mode
 | Embedding | A 256-dim L2-normalized vector produced by an encoder + projection head. | "embedding" |
 | Retrieval direction | An ordered pair of modalities (e.g., mol→morph). 6 total directions exist. | "direction" (e.g., "mol→morph direction") |
 | Ablation config | One of the 8 experimental conditions (B0–B6, T1) in the ablation matrix. | "config" with ID (e.g., "config B4") |
-| Run | One training execution with a specific config + seed. 40 total runs in the core matrix. | "run" |
+| Run | One training execution with a specific config + seed. 24 total runs in the core matrix. | "run" |
 | Seed | An integer that fully determines all randomness (data splits, init, shuffling). | "seed" |
 
 ---

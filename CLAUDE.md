@@ -303,25 +303,24 @@ Result: T1 morph↔expr compound R@10 = 84.8% vs B6 morph↔expr = 75.1% (+10pp)
 
 S2b results (single seed): compound mean R@10 = 37.3% (6.6x random). morph→expr = 88.7% (+13.6pp vs B6), expr→morph = 87.0% (+13.0pp vs B6). Mol-containing directions ~11-14% (≈ bi-modal baselines). Locked as default T1 config.
 
-**Phase 3 — Ablations & Rigor** — **NEAR COMPLETE (PARTIAL SUCCESS per PRD §4.1)**
+**Phase 3 — Ablations & Rigor** — **COMPLETE (PARTIAL SUCCESS per PRD §4.1)**
 
-24-run core matrix (4 baselines × 1 seed + 4 trained × 5 seeds):
-- 20/24 runs complete: B4-B6, T1 × 5 seeds. All checkpoints and metrics collected.
-- 4/24 pending: B0-B3 baseline evaluations (code ready, ~1 min on Colab).
+24-run core matrix (4 baselines × 1 seed + 4 trained × 5 seeds) — all 24/24 runs executed.
+- B0-B3 baselines evaluated (random embeddings + raw features).
+- B4-B6, T1 × 5 seeds trained. All 20 checkpoints and metrics collected.
 - Statistical analysis complete: T1 vs B4/B5/B6 Welch's t-test, all p < 1e-10.
+- All outputs generated: `ablation_summary.csv`, `ablation_comparison.tex`, `ablation_barplot.png`.
+- Full evaluation report: retrieval tables, UMAP plots, similarity heatmaps, training curves.
 
 Key results (5-seed means ± std):
-- T1 compound mean R@10 = 36.8% ± 0.8% (6.5x random baseline of 5.6%)
+- T1 compound mean R@10 = 36.8% ± 0.8% (6.1x random baseline B0 = 6.0%)
 - T1 morph↔expr = 88.4%/86.9% vs B6 = 74.0%/73.0% (+14pp, p < 1e-13)
 - T1 mol-containing = ~11.5% ≈ B4/B5 levels (ECFP representation ceiling)
 - B6 morph↔expr = 73.4% ± 0.8% (strongest single-pair baseline)
+- B0-B3 baselines: 5.1–6.4% (raw features ≈ random, confirming training is necessary)
 
 Scientific outcome: Adding molecular information significantly improves phenotype-phenotype alignment (+14pp morph↔expr), but mol-containing retrieval is bottlenecked by ECFP representation (~11.5%), invariant across all configs.
 
-**FR status:** FR-1 through FR-11 complete. FR-9.1 (ablation harness, B0-B3 baseline code ready but not yet executed). FR-9.2 (summary CSV, LaTeX, barplot, t-tests — fully implemented and generated).
-
-**Remaining before Phase 4:**
-1. Run B0-B3 baselines on Colab (~1 min): `python3 scripts/run_ablations.py --matrix core --resume`
-2. Regenerate summary: `python3 scripts/summarize_ablations.py`
+**FR status:** FR-1 through FR-11 complete. FR-9.1 (ablation harness — all 24 runs executed). FR-9.2 (summary CSV, LaTeX, barplot, t-tests — fully implemented and generated).
 
 **Next: Phase 4 — Polish & Ship.** README, technical report, demo notebook, test coverage, reproducibility check.
