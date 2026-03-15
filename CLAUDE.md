@@ -44,6 +44,7 @@ Before implementing anything, check this list. These are **permanent non-goals**
 | Normalization | BatchNorm in encoders | LayerNorm | Standard for MLP encoders in contrastive learning |
 | Split strategy | Scaffold-based (Bemis-Murcko) | Random split | Prevents molecular structure leakage |
 | GPU environment | Google Colab H100 (80 GB HBM3) | Local T4/V100 | Ample VRAM; code stays portable to smaller GPUs |
+| SigLIP parameterization | Per-pair (independent temp/bias per modality pair) | Shared (single temp/bias across all pairs) | Shared params caused cross-pair gradient interference; per-pair recovered morph↔expr by +20pp |
 
 ---
 
@@ -163,13 +164,21 @@ CaPy-v2/
 │   ├── train.py                     # make train entry point
 │   ├── evaluate.py                  # make evaluate entry point
 │   ├── run_ablations.py             # FR-9.1: ablation harness
-│   └── summarize_ablations.py       # FR-9.2: ablation summary
+│   ├── summarize_ablations.py       # FR-9.2: ablation summary (STUB)
+│   ├── verify_signal.py             # Raw-feature baselines (6 directions)
+│   ├── analyze_checkpoints.py       # Compare per-direction metrics across checkpoints
+│   └── diagnose.py                  # Diagnostic utility
+├── notebooks/
+│   └── colab_training.ipynb          # Colab notebook (GPU training, all phases)
 ├── tests/
 │   ├── test_data.py
 │   ├── test_models.py
 │   ├── test_losses.py
 │   ├── test_retrieval.py
-│   └── test_featurize.py
+│   ├── test_featurize.py
+│   ├── test_training.py
+│   ├── test_clustering.py
+│   └── test_report.py
 ├── data/
 │   ├── raw/{morphology,expression,metadata}/  # Downloaded (gitignored)
 │   ├── processed/                              # QC'd + normalized (gitignored)
@@ -251,15 +260,26 @@ Before writing code for any feature:
 2. **Write test alongside:** Every module gets a corresponding test. Write tests that verify the "Verified when" clause from the FR.
 3. **Check non-goals:** Re-read NG1–NG9 above before starting. If your implementation touches a non-goal, stop.
 
+When adding or modifying any code that requires GPU execution (training, evaluation, sweeps):
+1. Implement and test locally (CPU, synthetic data)
+2. Update `notebooks/colab_training.ipynb` with the corresponding cell(s)
+3. Push to main — user pulls on Colab to run
+4. User reports results back for analysis
+Do NOT assume local GPU access. All GPU work runs on Google Colab H100.
+
 When debugging:
 - Check alignment/uniformity metrics first — collapse (uniformity > −0.5) is the most common failure mode.
 - Check per-modality loss components — asymmetric convergence is expected and not an error.
 - Check data shapes at module boundaries — mismatched feature dims are the second most common issue.
+- If morph↔expr R@10 drops significantly in tri-modal vs bi-modal, check SigLIP parameterization — shared temp/bias across pairs with different similarity distributions causes gradient interference.
+- Mol-containing R@10 ~12-14% is expected (ECFP representation ceiling). Do not chase higher without changing the encoder.
 
 Subagent patterns:
 - Data download: parallelize across 3 sources (morphology, expression, metadata)
 - Multi-seed training: parallelize across seeds for same config
 - Module implementation: parallelize independent modules (e.g., encoders + losses + evaluation)
+
+At end of session: run `/claude-md-management:revise-claude-md` to capture any learnings.
 
 Use context7 MCP for up-to-date PyTorch, Hydra, and RDKit documentation.
 
@@ -283,4 +303,6 @@ S2b results (single seed): compound mean R@10 = 37.3% (6.6x random). morph→exp
 
 **Current focus: Phase 3 — Ablations & Rigor.** Run 40-run ablation matrix (8 configs × 5 seeds), statistical analysis, complementarity analysis.
 
-Next: `python scripts/run_ablations.py --matrix core` on Colab → `scripts/summarize_ablations.py` → p-values.
+**FR status:** FR-1 through FR-8 complete. FR-9.1 (ablation harness) complete. FR-9.2 (summarize_ablations.py) is a STUB — implement after Phase 3 matrix completes. FR-10/11 (config/logging utils) complete.
+
+Next: `python scripts/run_ablations.py --matrix core` on Colab → implement FR-9.2 → p-values → Phase 4 (report).
