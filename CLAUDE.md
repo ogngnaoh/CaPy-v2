@@ -40,7 +40,7 @@ Before implementing anything, check this list. These are **permanent non-goals**
 | Morphology source | Consensus MODZ profiles from lincs-cell-painting repo (Git LFS, ~145 MB) | Per-plate S3 profiles (2.65 GB, 1620 files) | Pre-aggregated, treatment-level, full features for our own QC |
 | L1000 level | Level 5 (treatment-level MODZ) | Level 4 (replicate-level, noisier) | Better SNR, matches 1:1:1 treatment pairing |
 | Config management | Hydra | Raw omegaconf / argparse | Structured overrides, multirun, config groups |
-| Experiment tracking | Weights & Biases | TensorBoard | Better sweep management, team features |
+| Experiment tracking | Local JSON + checkpoint + log files | W&B (never used in practice) | All 24 ablation runs tracked locally; simpler, no external dependency |
 | Normalization | BatchNorm in encoders | LayerNorm | Standard for MLP encoders in contrastive learning |
 | Split strategy | Scaffold-based (Bemis-Murcko) | Random split | Prevents molecular structure leakage |
 | GPU environment | Google Colab H100 (80 GB HBM3) | Local T4/V100 | Ample VRAM; code stays portable to smaller GPUs |
@@ -99,7 +99,6 @@ black src/ tests/ scripts/
 **Using:**
 - Python 3.10+, PyTorch (training framework)
 - Hydra + OmegaConf (config management)
-- Weights & Biases (experiment tracking)
 - RDKit (SMILES → ECFP fingerprints)
 - pandas, numpy, scipy, scikit-learn (data processing)
 - pyarrow (parquet I/O)
@@ -119,12 +118,16 @@ black src/ tests/ scripts/
 
 ```
 CaPy-v2/
+├── README.md                        # Project README
+├── TECHNICAL_REPORT.md              # Research write-up (mini-paper)
 ├── CLAUDE.md                        # This file
 ├── capy_v2_prd.md                   # Product requirements (authoritative)
 ├── capy_v2_fsd.md                   # Functional spec (authoritative)
 ├── pyproject.toml                   # Dependencies + tool config
 ├── Makefile                         # CLI entry points
+├── Dockerfile                       # CPU Docker image for tests
 ├── .pre-commit-config.yaml          # Ruff, black, data blocker
+├── .github/workflows/test.yml       # GitHub Actions CI
 ├── configs/
 │   ├── default.yaml                 # Top-level defaults
 │   ├── data/lincs.yaml              # Dataset URLs, paths, QC thresholds
@@ -155,8 +158,8 @@ CaPy-v2/
 │   │   ├── clustering.py            # FR-8.3: MOA clustering
 │   │   └── report.py               # FR-8.4: full evaluation report
 │   └── utils/
-│       ├── config.py                # FR-10: Hydra utilities
-│       ├── logging.py               # FR-11: logger setup
+│       ├── config.py                # FR-10: get_git_hash(), save_config_yaml()
+│       ├── logging.py               # FR-11: logger setup, setup_log_level, setup_file_logging
 │       └── seeding.py               # FR-10.2: seed_everything()
 ├── scripts/
 │   ├── download.py                  # make setup entry point
@@ -164,12 +167,10 @@ CaPy-v2/
 │   ├── train.py                     # make train entry point
 │   ├── evaluate.py                  # make evaluate entry point
 │   ├── run_ablations.py             # FR-9.1: ablation harness
-│   ├── summarize_ablations.py       # FR-9.2: ablation summary
-│   ├── verify_signal.py             # Raw-feature baselines (6 directions)
-│   ├── analyze_checkpoints.py       # Compare per-direction metrics across checkpoints
-│   └── diagnose.py                  # Diagnostic utility
+│   └── summarize_ablations.py       # FR-9.2: ablation summary
 ├── notebooks/
-│   └── colab_training.ipynb          # Colab notebook (GPU training, all phases)
+│   ├── colab_training.ipynb          # Colab notebook (GPU training, all phases)
+│   └── demo.ipynb                    # CPU demo notebook (synthetic data)
 ├── tests/
 │   ├── test_data.py
 │   ├── test_models.py
@@ -177,6 +178,8 @@ CaPy-v2/
 │   ├── test_retrieval.py
 │   ├── test_featurize.py
 │   ├── test_training.py
+│   ├── test_logging.py
+│   ├── test_seeding.py
 │   ├── test_clustering.py
 │   ├── test_report.py
 │   ├── test_summarize.py
@@ -215,7 +218,6 @@ VICReg operates on encoder outputs (pre-projection, pre-normalization) —
 applying VICReg to L2-normalized vectors causes the variance hinge to saturate.
 w₁ = w₂ = 2.0 (mol pairs), w₃ = 1.0 (morph↔expr). λ = 0.1.
 For bi-modal configs, only the relevant pair is included (weight = 1.0).
-Curriculum mode (disabled by default) linearly ramps mol-pair weights from 0 to target over warmup epochs.
 
 ### Training Hyperparameters
 
@@ -299,7 +301,7 @@ Gate: Tri-modal beats best bi-modal on at least one metric category.
 
 Result: T1 morph↔expr compound R@10 = 84.8% vs B6 morph↔expr = 75.1% (+10pp). Adding mol helps morph↔expr alignment. However, mol-containing directions remain at ~12% (barely 2x random).
 
-**Phase 2 Remediation — COMPLETE.** Sweep of 7 configs on Colab (per-pair SigLIP, loss weights, discriminative LR, curriculum, staged). Best config: **S2b (per-pair SigLIP + 2x mol pair weights)**.
+**Phase 2 Remediation — COMPLETE.** Sweep of 7 configs on Colab (per-pair SigLIP, loss weights, discriminative LR). Best config: **S2b (per-pair SigLIP + 2x mol pair weights)**.
 
 S2b results (single seed): compound mean R@10 = 37.3% (6.6x random). morph→expr = 88.7% (+13.6pp vs B6), expr→morph = 87.0% (+13.0pp vs B6). Mol-containing directions ~11-14% (≈ bi-modal baselines). Locked as default T1 config.
 

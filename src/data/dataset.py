@@ -125,9 +125,7 @@ class CaPyDataset(Dataset):
             mol[nonzero_idx[drop_sel]] = 0.0
         return mol
 
-    def _apply_scarf(
-        self, x: torch.Tensor, data: torch.Tensor
-    ) -> torch.Tensor:
+    def _apply_scarf(self, x: torch.Tensor, data: torch.Tensor) -> torch.Tensor:
         """Apply SCARF corruption by replacing features with empirical marginal draws."""
         d = x.shape[0]
         n_corrupt = int(d * self._scarf_corruption_rate)

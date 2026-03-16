@@ -21,9 +21,7 @@ class SigLIPLoss(nn.Module):
     pairs, eliminating false negatives from dose-level duplication.
     """
 
-    def __init__(
-        self, bias_init: float = 0.0, log_temp_init: float = 2.0
-    ) -> None:
+    def __init__(self, bias_init: float = 0.0, log_temp_init: float = 2.0) -> None:
         super().__init__()
         self.bias = nn.Parameter(torch.tensor(bias_init))
         self.log_temperature = nn.Parameter(torch.tensor(log_temp_init))

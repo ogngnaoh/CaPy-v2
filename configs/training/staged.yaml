@@ -1,9 +1,0 @@
-defaults:
-  - default
-
-staged:
-  enabled: true
-  stage1_epochs: 100
-  stage1_modalities: [morph, expr]
-  stage2_freeze: [morph, expr]
-  stage2_lr_mult: 0.1

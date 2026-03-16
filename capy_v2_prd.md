@@ -100,16 +100,16 @@ WHY: InfoAlign only evaluates molecule-centric retrieval on 80–196 pairs. CaPy
 
 ### 5.2 P1 (Should Have) — Engineering Quality
 
-**F5: Hydra config + W&B experiment tracking.**
+**F5: Hydra config + local experiment tracking.**
 WHY: Reproducibility and systematic hyperparameter management matching insitro's internal practices.
 
 **F6: SCARF tabular augmentation.**
 30–60% feature corruption with empirical marginal replacement for morphology and expression inputs.
 WHY: Standard for tabular contrastive learning; effectively doubles positive pairs.
 
-**F7: Staged bi-modal → tri-modal training.**
-Pre-train morph↔expr, then add molecular encoder.
-WHY: Prevents weakest modality pair from causing collapse during early training.
+**F7: Loss weighting strategies.**
+Adjustable per-pair loss weights to balance modality contributions.
+WHY: Prevents weakest modality pair from dominating or causing collapse during training.
 
 ### 5.3 P2 (Could Have) — Extensions
 
@@ -202,7 +202,7 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
 **Gate: Bi-modal mol↔morph compound-level R@10 > 10% (2x random at ~200 val compounds) AND alignment < 1.5.**
 
 - **Week 1 — Data audit + repo scaffold.**
-  - Set up repo: Hydra configs, W&B tracking, Docker environment, pre-commit hooks (black, ruff)
+  - Set up repo: Hydra configs, experiment tracking infrastructure, Docker environment, pre-commit hooks (black, ruff)
   - Download LINCS data from all three sources (CP Gallery S3, Figshare L1000, Repurposing Hub SMILES)
   - Run data audit script: feature distributions, NaN rates, replicate correlations, compound overlap with metadata
   - **Hard deliverable:** `data/reports/lincs_audit.md` confirming usable sample count (target: ≥5,000 treatment pairs after QC)
@@ -240,11 +240,11 @@ WHY: Fair head-to-head comparison on symmetric retrieval.
   - Complete tri-modal training
   - Generate full comparison table: tri-modal vs. all bi-modal pairs across all metrics
   - Produce UMAP visualizations colored by MOA
-  - **🚦 CRITICAL GO/NO-GO:** Does tri-modal beat best bi-modal? If yes → proceed. If marginal → investigate staged training + loss weighting. If no → execute pivot (complementarity analysis).
+  - **🚦 CRITICAL GO/NO-GO:** Does tri-modal beat best bi-modal? If yes → proceed. If marginal → investigate loss weighting strategies. If no → execute pivot (complementarity analysis).
 
 - **Week 6 — Optimization.**
   - Hyperparameter sweep: temperature (0.05, 0.07, 0.1), projection dim (128, 256, 512), LR, batch size
-  - Experiment with staged vs. joint training
+  - Experiment with loss weighting strategies
   - Test DCL as loss alternative
   - Run 5-seed experiments on best configuration
   - **Hard deliverable:** Optimized tri-modal model with quantified improvement margins
@@ -423,7 +423,7 @@ Total: 24 runs. B0-B3 evaluate in ~1 min (no training). B4-T1: ~15 min/run × 20
 | Encoder choice | ECFP vs. ChemBERTa vs. pretrained GIN (T1 config, 3 seeds each) | Molecular encoder impact |
 | Embedding dim | 64, 128, 256, 512 (T1 config, 3 seeds each) | Capacity vs. overfitting |
 | Dataset size | 25%, 50%, 75%, 100% of data (T1 config, 3 seeds each) | Sample efficiency |
-| Staged vs. joint | Pre-train morph↔expr then add mol, vs. all three jointly | Training strategy |
+| Loss weighting | Uniform vs. asymmetric per-pair weights (e.g., 2x mol pairs) | Loss balance strategy |
 
 ---
 

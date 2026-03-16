@@ -22,7 +22,7 @@
 
 ## 1. Overview & Scope
 
-CaPy v2 is a Python command-line research framework that trains contrastive models aligning three biological data modalities — molecular structure, cell morphology, and gene expression — in a shared embedding space, then evaluates whether tri-modal alignment outperforms any bi-modal pair. The user interacts with CaPy through four CLI entry points: `download`, `preprocess`, `train`, and `evaluate`. All configuration is managed via YAML files loaded by Hydra. All experiment metrics are logged to Weights & Biases and to local JSON files.
+CaPy v2 is a Python command-line research framework that trains contrastive models aligning three biological data modalities — molecular structure, cell morphology, and gene expression — in a shared embedding space, then evaluates whether tri-modal alignment outperforms any bi-modal pair. The user interacts with CaPy through four CLI entry points: `download`, `preprocess`, `train`, and `evaluate`. All configuration is managed via YAML files loaded by Hydra. All experiment metrics are logged to local JSON files and console.
 
 **In scope:** Data pipeline (download → QC → normalize → split), model training with configurable modality combinations, evaluation suite (retrieval + clustering + diagnostics), ablation harness for systematic experiments, reproducibility infrastructure (Docker, seeding, config hashing).
 
@@ -75,7 +75,7 @@ Hoang wants to execute all 24 runs (4 baselines × 1 seed + 4 trained × 5 seeds
 python scripts/run_ablations.py --matrix core
 ```
 
-**Happy path:** The system launches runs sequentially (or via Hydra multirun if configured). Each run logs to W&B with tags `config=B4, seed=42`. After all 24 runs complete, the system generates `results/ablation_summary.csv` containing all metrics for all runs, and prints a comparison table to stdout showing mean ± std for each config across seeds.
+**Happy path:** The system launches runs sequentially (or via Hydra multirun if configured). Each run writes metrics to `results/ablation_runs.jsonl`. After all 24 runs complete, the system generates `results/ablation_summary.csv` containing all metrics for all runs, and prints a comparison table to stdout showing mean ± std for each config across seeds.
 
 **Unhappy path — a run crashes mid-execution:** The system logs which runs completed and which failed. On rerun with `--resume`, it skips completed runs (identified by config+seed matching existing checkpoints) and only runs the remaining ones.
 
@@ -367,19 +367,19 @@ Trigger: User runs `python scripts/train.py --config configs/[name].yaml` or `ma
 Input: Hydra config specifying all hyperparameters.
 Behavior:
 - The system SHALL seed all random sources (Python, NumPy, PyTorch, CUDA) with `config.seed`.
-- The system SHALL log all config values to W&B at run start.
+- The system SHALL log all config values to console and per-run metrics JSON at run start.
 - For each epoch:
   1. Set model to train mode.
   2. Iterate over training DataLoader batches.
   3. Forward pass → compute loss (FR-6.3) → backward pass → clip gradients (max_norm from config) → optimizer step → scheduler step.
-  4. Log per-batch metrics to W&B: `train/loss_total`, individual loss components, `train/grad_norm`, `train/temperature` (if applicable).
+  4. Log per-batch metrics to console and training log file: `train/loss_total`, individual loss components, `train/grad_norm`, `train/temperature` (if applicable).
   5. Set model to eval mode.
   6. Run validation evaluation (FR-8.1) on val set.
   7. Log per-epoch metrics: all val retrieval metrics, alignment/uniformity, val loss.
   8. Check early stopping (FR-7.3).
   9. Check collapse detection (FR-7.4).
 - The system SHALL use mixed precision (bfloat16) if CUDA is available.
-Verified when: W&B dashboard shows per-batch and per-epoch metrics. Training completes without NaN losses.
+Verified when: Training log and console show per-batch and per-epoch metrics. Training completes without NaN losses.
 
 **FR-7.2: Checkpointing**
 Trigger: At the end of each epoch where validation metric improves.
@@ -404,7 +404,7 @@ Trigger: After each validation evaluation.
 Input: Per-modality uniformity scores.
 Behavior:
 - For each active modality, IF uniformity > −0.5 (near-collapse), the system SHALL print: "COLLAPSE WARNING: [modality] uniformity=[X] (threshold=−0.5). Encoder may be collapsing."
-- The system SHALL log `collapse_warning=True` to W&B for any epoch where a warning fires.
+- The system SHALL log COLLAPSE WARNING at WARNING level for any epoch where a warning fires.
 - The system SHALL NOT stop training on collapse detection (VICReg should self-correct).
 Verified when: When all embeddings are identical (uniformity ≈ 0), the warning fires. When embeddings are well-distributed (uniformity < −2), no warning fires.
 
@@ -460,7 +460,7 @@ Behavior:
   - `results/retrieval_table.tex` — LaTeX-formatted version
   - `results/umap_{modality}.png` — UMAP visualization for each modality, colored by MOA where available
   - `results/similarity_heatmap.png` — 6-panel heatmap of similarity matrices for all directions
-  - `results/training_curves.png` — loss and R@10 over epochs (loaded from W&B or local log)
+  - `results/training_curves.png` — loss and R@10 over epochs (loaded from epoch_history in checkpoint)
 - The system SHALL print a formatted summary table to stdout.
 Verified when: All output files exist and are non-empty. The summary table contains all 6 retrieval directions.
 
@@ -519,7 +519,7 @@ Behavior:
   └── ablation/
       └── core.yaml          # 8-config × 5-seed matrix definition
   ```
-- Every training run SHALL log the resolved config to W&B and to `checkpoints/{run_name}_config.yaml`.
+- Every training run SHALL save the resolved config to `checkpoints/{run_name}_config.yaml`.
 - The system SHALL support command-line overrides: `python scripts/train.py model=bi_mol_morph training.batch_size=128 seed=123`.
 Verified when: `python scripts/train.py --cfg job` prints the full resolved config. Overrides change the logged config.
 
@@ -527,7 +527,7 @@ Verified when: `python scripts/train.py --cfg job` prints the full resolved conf
 Trigger: Always.
 Behavior:
 - The system SHALL seed Python (`random`), NumPy (`np.random`), PyTorch (`torch.manual_seed`, `torch.cuda.manual_seed_all`), and set `torch.backends.cudnn.deterministic = True`.
-- The system SHALL log the git commit hash (if in a git repo) to W&B metadata.
+- The system SHALL log the git commit hash (if in a git repo) to per-run metrics JSON and console.
 - Two runs with identical config + seed + code SHALL produce identical val metrics (within floating-point tolerance of ±1e-5).
 Verified when: Running the same config+seed twice produces identical `mean_R@10` values.
 
@@ -535,15 +535,16 @@ Verified when: Running the same config+seed twice produces identical `mean_R@10`
 
 ### FR-11.0: Logging & Monitoring
 
-**FR-11.1: W&B logging**
+**FR-11.1: Local file logging**
 Trigger: During training.
 Behavior:
-- The system SHALL log to W&B project `capy-v2` with run name `{config_name}_seed{seed}`.
-- Per-batch: `train/loss_total`, `train/loss_{pair}` for each active pair, `train/grad_norm`.
-- Per-epoch: all val retrieval metrics (FR-8.1), alignment/uniformity (FR-8.2), val loss, learning rate, epoch number.
-- Run metadata: full config, git hash, GPU type, total parameters, dataset sizes.
-- The system SHALL tag each run with: `config={config_name}`, `seed={seed}`, `dataset=lincs`.
-Verified when: W&B dashboard shows all listed metrics. Runs are filterable by config tag.
+- The system SHALL write per-run structured metrics to `results/{config_name}_seed{seed}_metrics.json` containing: final retrieval metrics, alignment/uniformity, best epoch, full config, git hash, GPU type, total parameters, dataset sizes, and the complete epoch_history array.
+- The system SHALL write per-run training logs to `results/{config_name}_seed{seed}_train.log` containing per-batch and per-epoch log messages in the CaPy format (`{timestamp} | {module} | {level} | {message}`).
+- The system SHALL log to the console using the CaPy logging format at the configured verbosity level.
+- Per-batch console logging: `train/loss_total`, `train/loss_{pair}` for each active pair, `train/grad_norm`.
+- Per-epoch console logging: all val retrieval metrics (FR-8.1), alignment/uniformity (FR-8.2), val loss, learning rate, epoch number.
+- Run metadata in metrics JSON: full config, git hash, GPU type, total parameters, dataset sizes.
+Verified when: After a training run completes, `results/{config_name}_seed{seed}_metrics.json` exists and contains all listed fields. The training log file contains per-batch and per-epoch entries.
 
 **FR-11.2: Console logging**
 Trigger: During all operations.

@@ -1,13 +1,15 @@
 """Tests for B0-B3 baseline evaluation in scripts/run_ablations.py."""
 
 import json
-import tempfile
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-import torch
+
+# scripts/ is not a package — add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.run_ablations import evaluate_baseline, load_existing_runs, main
 
@@ -111,9 +113,7 @@ class TestEvaluateBaselineSingleModality:
         expected_mean = np.mean([result[d] for d in expr_directions])
         assert abs(result["compound/mean_R@10"] - expected_mean) < 1e-6
 
-    def test_shared_directions_identical_across_b1_b2_b3(
-        self, synthetic_processed_dir
-    ):
+    def test_shared_directions_identical_across_b1_b2_b3(self, synthetic_processed_dir):
         """B1, B2, B3 use the same raw features — shared direction metrics should match."""
         b1 = evaluate_baseline("B1", 42, synthetic_processed_dir)
         b2 = evaluate_baseline("B2", 42, synthetic_processed_dir)

@@ -43,9 +43,7 @@ def load_model_and_config(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    checkpoint = torch.load(
-        checkpoint_path, map_location=device, weights_only=False
-    )
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     config = OmegaConf.create(checkpoint["config"])
     model = CaPyModel(config)
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -80,9 +78,7 @@ def generate_embeddings(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    all_embeddings: dict[str, list[torch.Tensor]] = {
-        m: [] for m in model.modalities
-    }
+    all_embeddings: dict[str, list[torch.Tensor]] = {m: [] for m in model.modalities}
     all_compound_ids: list[str] = []
     all_moa_labels: list[str | None] = []
 
@@ -90,9 +86,7 @@ def generate_embeddings(
     with torch.no_grad():
         for batch in data_loader:
             batch_gpu = {
-                k: v.to(device)
-                for k, v in batch.items()
-                if isinstance(v, torch.Tensor)
+                k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)
             }
             embeddings, _ = model(batch_gpu)
 
@@ -104,9 +98,7 @@ def generate_embeddings(
                     all_compound_ids.append(meta["compound_id"])
                     all_moa_labels.append(meta.get("moa"))
 
-    concat_embeddings = {
-        m: torch.cat(tensors) for m, tensors in all_embeddings.items()
-    }
+    concat_embeddings = {m: torch.cat(tensors) for m, tensors in all_embeddings.items()}
     return concat_embeddings, all_compound_ids, all_moa_labels
 
 
@@ -132,14 +124,10 @@ def compute_all_metrics(
 
     # Compound-level retrieval (FR-8.1)
     if compound_ids:
-        metrics.update(
-            compute_all_compound_retrieval_metrics(embeddings, compound_ids)
-        )
+        metrics.update(compute_all_compound_retrieval_metrics(embeddings, compound_ids))
 
     # Alignment + uniformity (FR-8.2)
-    modalities = sorted(
-        embeddings.keys(), key=lambda m: _MODALITY_ORDER[m]
-    )
+    modalities = sorted(embeddings.keys(), key=lambda m: _MODALITY_ORDER[m])
     for m_a, m_b in itertools.combinations(modalities, 2):
         metrics[f"align_{m_a}_{m_b}"] = compute_alignment(
             embeddings[m_a], embeddings[m_b]
@@ -179,9 +167,7 @@ def compute_all_metrics(
             if compound_moas[idx] is None and moa_labels[i] is not None:
                 compound_moas[idx] = moa_labels[i]
 
-        clustering_metrics = compute_moa_clustering(
-            compound_emb, compound_moas
-        )
+        clustering_metrics = compute_moa_clustering(compound_emb, compound_moas)
         for k, v in clustering_metrics.items():
             metrics[f"moa/{k}"] = v
 
@@ -222,9 +208,7 @@ def generate_retrieval_table(
         # Compound-level metrics
         for metric_name in ["R@1", "R@5", "R@10", "MRR"]:
             key = f"compound/{direction}/{metric_name}"
-            row[f"compound_{metric_name}"] = metrics.get(
-                key, float("nan")
-            )
+            row[f"compound_{metric_name}"] = metrics.get(key, float("nan"))
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -259,28 +243,21 @@ def generate_umap_plots(
     valid_moas = [m for m in moa_labels if m is not None]
     unique_moas = sorted(set(valid_moas))
     cmap = plt.get_cmap("tab20")
-    moa_to_color = {
-        moa: cmap(i % 20) for i, moa in enumerate(unique_moas)
-    }
+    moa_to_color = {moa: cmap(i % 20) for i, moa in enumerate(unique_moas)}
     grey = (0.7, 0.7, 0.7, 0.5)
 
-    for modality in sorted(
-        embeddings.keys(), key=lambda m: _MODALITY_ORDER[m]
-    ):
+    for modality in sorted(embeddings.keys(), key=lambda m: _MODALITY_ORDER[m]):
         emb_np = embeddings[modality].detach().cpu().numpy()
 
         reducer = umap.UMAP(n_components=2, random_state=42)
         coords = reducer.fit_transform(emb_np)
 
         colors = [
-            moa_to_color.get(m, grey) if m is not None else grey
-            for m in moa_labels
+            moa_to_color.get(m, grey) if m is not None else grey for m in moa_labels
         ]
 
         fig, ax = plt.subplots(figsize=(8, 6))
-        ax.scatter(
-            coords[:, 0], coords[:, 1], c=colors, s=5, alpha=0.7
-        )
+        ax.scatter(coords[:, 0], coords[:, 1], c=colors, s=5, alpha=0.7)
         ax.set_title(f"UMAP — {modality}")
         ax.set_xlabel("UMAP-1")
         ax.set_ylabel("UMAP-2")
@@ -311,9 +288,7 @@ def generate_similarity_heatmap(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    modalities = sorted(
-        embeddings.keys(), key=lambda m: _MODALITY_ORDER[m]
-    )
+    modalities = sorted(embeddings.keys(), key=lambda m: _MODALITY_ORDER[m])
     pairs = list(itertools.combinations(modalities, 2))
     n_pairs = len(pairs)
 
@@ -368,9 +343,7 @@ def generate_training_curves(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    checkpoint = torch.load(
-        checkpoint_path, map_location="cpu", weights_only=False
-    )
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     epoch_history = checkpoint.get("epoch_history", [])
 
     if not epoch_history:
@@ -444,11 +417,7 @@ def print_summary_table(metrics: dict[str, float]) -> None:
     # Retrieval metrics — row level
     lines.append("\n--- Row-level Retrieval R@10 ---")
     for key in sorted(metrics.keys()):
-        if (
-            key.endswith("/R@10")
-            and not key.startswith("compound/")
-            and "->" in key
-        ):
+        if key.endswith("/R@10") and not key.startswith("compound/") and "->" in key:
             direction = key.replace("/R@10", "")
             lines.append(f"  {direction:20s}  {metrics[key]:.4f}")
     if "mean_R@10" in metrics:
@@ -457,17 +426,11 @@ def print_summary_table(metrics: dict[str, float]) -> None:
     # Retrieval metrics — compound level
     lines.append("\n--- Compound-level Retrieval R@10 ---")
     for key in sorted(metrics.keys()):
-        if (
-            key.startswith("compound/")
-            and key.endswith("/R@10")
-            and "->" in key
-        ):
+        if key.startswith("compound/") and key.endswith("/R@10") and "->" in key:
             direction = key.split("/")[1]
             lines.append(f"  {direction:20s}  {metrics[key]:.4f}")
     if "compound/mean_R@10" in metrics:
-        lines.append(
-            f"  {'mean':20s}  {metrics['compound/mean_R@10']:.4f}"
-        )
+        lines.append(f"  {'mean':20s}  {metrics['compound/mean_R@10']:.4f}")
 
     # Diagnostics
     lines.append("\n--- Alignment & Uniformity ---")

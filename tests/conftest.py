@@ -78,8 +78,7 @@ def mock_morph_batches(tmp_path):
         data = {
             "Metadata_broad_sample": brd_ids,
             "Metadata_pert_iname": ["DMSO"] + [f"cmpd_{i}" for i in range(1, n)],
-            "Metadata_moa": [None, None]
-            + [f"moa_{i % 4}" for i in range(2, n)],
+            "Metadata_moa": [None, None] + [f"moa_{i % 4}" for i in range(2, n)],
             "Metadata_Plate": [f"plate_{i % 3}" for i in range(n)],
         }
         for feat in shared_features + extra_features:
@@ -134,15 +133,11 @@ def mock_expr_data(tmp_path):
             "pert_id": compound_ids,
             "x_smiles": smiles_list,
             "dose_value": [0.0, 0.0] + [float(2**i) for i in range(n_samples - 2)],
-            "pert_iname": ["DMSO", "DMSO"]
-            + [f"cmpd_{i}" for i in range(2, n_samples)],
-            "pert_type": ["ctl_vehicle", "ctl_vehicle"]
-            + ["trt_cp"] * (n_samples - 2),
+            "pert_iname": ["DMSO", "DMSO"] + [f"cmpd_{i}" for i in range(2, n_samples)],
+            "pert_type": ["ctl_vehicle", "ctl_vehicle"] + ["trt_cp"] * (n_samples - 2),
         }
     )
-    col_meta.to_csv(
-        expr_dir / "col_meta_level_5.txt", sep="\t", index=False
-    )
+    col_meta.to_csv(expr_dir / "col_meta_level_5.txt", sep="\t", index=False)
 
     # pert_info — 35 unique compounds, ~80% with MOA
     n_pert = 35
@@ -153,9 +148,7 @@ def mock_expr_data(tmp_path):
             "moa": [f"moa_{i % 5}" if i < 28 else None for i in range(n_pert)],
         }
     )
-    pert_info.to_csv(
-        expr_dir / "pert_info.txt", sep="\t", index=False
-    )
+    pert_info.to_csv(expr_dir / "pert_info.txt", sep="\t", index=False)
 
     # Save data_df as a parquet for easy loading (mock for GCTX)
     data_df.to_parquet(expr_dir / "data_df.parquet")
@@ -200,17 +193,12 @@ def mock_expr_data_no_inst_id(tmp_path):
             "profile_id": sample_ids,
             "pert_id": compound_ids,
             "x_smiles": smiles_list,
-            "dose_value": [0.0, 0.0]
-            + [float(2**i) for i in range(n_samples - 2)],
-            "pert_iname": ["DMSO", "DMSO"]
-            + [f"cmpd_{i}" for i in range(2, n_samples)],
-            "pert_type": ["ctl_vehicle", "ctl_vehicle"]
-            + ["trt_cp"] * (n_samples - 2),
+            "dose_value": [0.0, 0.0] + [float(2**i) for i in range(n_samples - 2)],
+            "pert_iname": ["DMSO", "DMSO"] + [f"cmpd_{i}" for i in range(2, n_samples)],
+            "pert_type": ["ctl_vehicle", "ctl_vehicle"] + ["trt_cp"] * (n_samples - 2),
         }
     )
-    col_meta.to_csv(
-        expr_dir / "col_meta_level_5.txt", sep="\t", index=False
-    )
+    col_meta.to_csv(expr_dir / "col_meta_level_5.txt", sep="\t", index=False)
 
     # pert_info
     n_pert = 35
@@ -459,9 +447,7 @@ def mock_dataset_parquet(tmp_path):
 
     json_path = tmp_path / "feature_columns.json"
     with open(json_path, "w") as f:
-        json.dump(
-            {"morph_features": morph_features, "expr_features": expr_features}, f
-        )
+        json.dump({"morph_features": morph_features, "expr_features": expr_features}, f)
 
     return {
         "parquet_path": str(parquet_path),
@@ -510,25 +496,19 @@ def mock_split_parquets(tmp_path):
     for split_name, n in splits.items():
         data = {
             "compound_id": [f"BRD-K{idx + i:08d}" for i in range(n)],
-            "smiles": [
-                valid_smiles[(idx + i) % len(valid_smiles)] for i in range(n)
-            ],
+            "smiles": [valid_smiles[(idx + i) % len(valid_smiles)] for i in range(n)],
             "moa": [f"moa_{i % 3}" for i in range(n)],
         }
         for feat in morph_features:
             data[feat] = np.random.randn(n)
         for feat in expr_features:
             data[feat] = np.random.randn(n)
-        pd.DataFrame(data).to_parquet(
-            tmp_path / f"{split_name}.parquet", index=False
-        )
+        pd.DataFrame(data).to_parquet(tmp_path / f"{split_name}.parquet", index=False)
         idx += n
 
     json_path = tmp_path / "feature_columns.json"
     with open(json_path, "w") as f:
-        json.dump(
-            {"morph_features": morph_features, "expr_features": expr_features}, f
-        )
+        json.dump({"morph_features": morph_features, "expr_features": expr_features}, f)
 
     config = OmegaConf.create(
         {

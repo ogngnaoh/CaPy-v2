@@ -8,7 +8,9 @@ from omegaconf import OmegaConf
 
 from src.evaluation.report import (
     compute_all_metrics,
+    generate_embeddings,
     generate_retrieval_table,
+    generate_similarity_heatmap,
     generate_training_curves,
     generate_umap_plots,
     load_model_and_config,
@@ -204,6 +206,63 @@ class TestPrintSummary:
         }
         # Should not raise
         print_summary_table(metrics)
+
+
+class TestGenerateEmbeddings:
+    """Tests for generate_embeddings."""
+
+    def test_returns_correct_shapes(self, tmp_path):
+        """Embeddings should have [N, D] shape for each modality."""
+        from torch.utils.data import DataLoader, Dataset
+
+        from src.data.dataset import collate_fn
+        from src.models.capy import CaPyModel
+
+        config = _make_config()
+        model = CaPyModel(config)
+        model.eval()
+
+        class _TinyDataset(Dataset):
+            def __len__(self):
+                return 8
+
+            def __getitem__(self, idx):
+                return {
+                    "mol": torch.randn(64),
+                    "morph": torch.randn(48),
+                    "expr": torch.randn(32),
+                    "metadata": {
+                        "compound_id": f"BRD-{idx:04d}",
+                        "smiles": "CCO",
+                        "moa": "moa_0",
+                    },
+                }
+
+        loader = DataLoader(_TinyDataset(), batch_size=4, collate_fn=collate_fn)
+        embeddings, compound_ids, moa_labels = generate_embeddings(
+            model, loader, device="cpu"
+        )
+
+        assert len(compound_ids) == 8
+        assert len(moa_labels) == 8
+        for m in ["mol", "morph", "expr"]:
+            assert embeddings[m].shape == (8, 32)
+
+
+class TestSimilarityHeatmap:
+    """Tests for generate_similarity_heatmap."""
+
+    def test_generates_png(self, tmp_path):
+        """Should create similarity_heatmap.png."""
+        torch.manual_seed(42)
+        embeddings = {
+            "mol": f.normalize(torch.randn(20, 32), dim=-1),
+            "morph": f.normalize(torch.randn(20, 32), dim=-1),
+            "expr": f.normalize(torch.randn(20, 32), dim=-1),
+        }
+        path = generate_similarity_heatmap(embeddings, tmp_path, max_samples=10)
+        assert path.exists()
+        assert path.suffix == ".png"
 
 
 class TestTrainingCurves:

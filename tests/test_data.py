@@ -15,7 +15,10 @@ from src.data.audit import (
     run_audit,
 )
 from src.data.download import (
+    _build_session,
+    _download_file,
     _load_download_config,
+    download_all,
 )
 
 # ── Download helpers ────────────────────────────────────────────
@@ -56,6 +59,122 @@ class TestDownloadHelpers:
         files = cfg.sources.expression.files
         assert "level_4" in files
         assert files.level_4.get("primary", True) is False
+
+
+# ── Download core functions ────────────────────────────────────
+
+
+class TestBuildSession:
+    """Tests for _build_session."""
+
+    def test_returns_session(self):
+        """Should return a requests.Session."""
+        import requests
+
+        session = _build_session(retries=1, timeout=5)
+        assert isinstance(session, requests.Session)
+
+    def test_has_retry_adapter(self):
+        """Session should have retry adapter mounted."""
+        session = _build_session(retries=2, timeout=10)
+        adapter = session.get_adapter("https://example.com")
+        assert adapter.max_retries.total == 2
+
+
+class TestDownloadFile:
+    """Tests for _download_file with mocked HTTP."""
+
+    def test_download_success(self, tmp_path, monkeypatch):
+        """Successful download writes file to dest."""
+        dest = tmp_path / "test_file.txt"
+        content = b"hello world"
+
+        class MockResponse:
+            status_code = 200
+            headers = {"content-length": str(len(content))}
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size=8192):
+                yield content
+
+        class MockSession:
+            def mount(self, *a, **kw):
+                pass
+
+            def get(self, url, **kw):
+                return MockResponse()
+
+        monkeypatch.setattr(
+            "src.data.download._build_session", lambda **kw: MockSession()
+        )
+        result = _download_file("https://example.com/file.txt", dest)
+        assert result == dest
+        assert dest.read_bytes() == content
+
+    def test_download_http_error(self, tmp_path, monkeypatch):
+        """HTTP error causes sys.exit(1)."""
+        import requests
+
+        dest = tmp_path / "fail.txt"
+
+        class MockResponse:
+            status_code = 404
+
+            def raise_for_status(self):
+                raise requests.HTTPError("404")
+
+        class MockSession:
+            def mount(self, *a, **kw):
+                pass
+
+            def get(self, url, **kw):
+                return MockResponse()
+
+        monkeypatch.setattr(
+            "src.data.download._build_session", lambda **kw: MockSession()
+        )
+        with pytest.raises(SystemExit):
+            _download_file("https://example.com/missing.txt", dest)
+
+
+class TestDownloadAll:
+    """Tests for download_all."""
+
+    def test_collects_errors(self, monkeypatch):
+        """download_all collects errors from failed downloads."""
+        monkeypatch.setattr(
+            "src.data.download.download_morphology",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("morph fail")),
+        )
+        monkeypatch.setattr(
+            "src.data.download.download_expression",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("expr fail")),
+        )
+        monkeypatch.setattr(
+            "src.data.download.download_metadata",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("meta fail")),
+        )
+        errors = download_all()
+        assert len(errors) == 3
+
+    def test_success_returns_empty(self, tmp_path, monkeypatch):
+        """download_all returns empty list on success."""
+        monkeypatch.setattr(
+            "src.data.download.download_morphology",
+            lambda *a, **kw: tmp_path,
+        )
+        monkeypatch.setattr(
+            "src.data.download.download_expression",
+            lambda *a, **kw: tmp_path,
+        )
+        monkeypatch.setattr(
+            "src.data.download.download_metadata",
+            lambda *a, **kw: tmp_path / "meta.txt",
+        )
+        errors = download_all()
+        assert errors == []
 
 
 # ── Download skip logic ────────────────────────────────────────
@@ -193,6 +312,39 @@ class TestDataAudit:
         assert "## Metadata" in content
         assert "## Cross-Modal Overlap" in content
 
+    def test_compute_overlap_morph_with_col_meta(self, mock_morph_csv, tmp_path):
+        """Overlap includes expr IDs when col_meta_*.txt exists."""
+        from src.data.audit import _compute_overlap
+
+        expr_dir = tmp_path / "expression"
+        expr_dir.mkdir()
+        # Create col_meta with pert_id column
+        col_meta = pd.DataFrame(
+            {
+                "pert_id": [f"BRD-K{i:08d}" for i in range(10)],
+                "pert_iname": [f"cmpd_{i}" for i in range(10)],
+            }
+        )
+        col_meta.to_csv(expr_dir / "col_meta_level_5.txt", sep="\t", index=False)
+        meta_path = tmp_path / "missing.txt"
+
+        result = _compute_overlap(mock_morph_csv, expr_dir, meta_path)
+        assert result is not None
+        assert "expr_treatments" in result
+        assert result["expr_treatments"] == 10
+
+    def test_audit_expression_with_col_meta(self, tmp_path):
+        """Expression audit picks up col_meta files when no GCTX."""
+        from src.data.audit import _audit_expression
+
+        expr_dir = tmp_path / "expression"
+        expr_dir.mkdir()
+        col_meta = pd.DataFrame({"pert_id": ["BRD-K001"], "dose_value": [1.0]})
+        col_meta.to_csv(expr_dir / "col_meta_level_5.txt", sep="\t", index=False)
+        result = _audit_expression(expr_dir)
+        assert result is not None
+        assert "col_meta_level_5" in result
+
     def test_run_audit_warns_low_overlap(
         self, mock_morph_csv, mock_metadata_tsv, tmp_path, caplog
     ):
@@ -209,6 +361,85 @@ class TestDataAudit:
         assert any(
             "< 5000" in msg or "insufficient" in msg.lower() for msg in caplog.messages
         )
+
+    def test_audit_expression_no_dir(self, tmp_path):
+        """Returns None when expr dir doesn't exist."""
+        from src.data.audit import _audit_expression
+
+        result = _audit_expression(tmp_path / "nonexistent")
+        assert result is None
+
+    def test_audit_expression_empty_dir(self, tmp_path):
+        """Returns None when expr dir has no GCTX files and no col_meta."""
+        from src.data.audit import _audit_expression
+
+        expr_dir = tmp_path / "expression"
+        expr_dir.mkdir()
+        result = _audit_expression(expr_dir)
+        assert result is None
+
+    def test_compute_overlap_empty(self, tmp_path):
+        """Returns None when all dirs are empty."""
+        from src.data.audit import _compute_overlap
+
+        morph_dir = tmp_path / "morph"
+        morph_dir.mkdir()
+        expr_dir = tmp_path / "expr"
+        expr_dir.mkdir()
+        meta_path = tmp_path / "meta.txt"
+        result = _compute_overlap(morph_dir, expr_dir, meta_path)
+        assert result is None
+
+    def test_compute_overlap_with_data(
+        self, mock_morph_csv, mock_metadata_tsv, tmp_path
+    ):
+        """Returns overlap dict when morph and meta data exist."""
+        from src.data.audit import _compute_overlap
+
+        expr_dir = tmp_path / "expression"
+        expr_dir.mkdir()
+        result = _compute_overlap(mock_morph_csv, expr_dir, mock_metadata_tsv)
+        assert result is not None
+        assert "morph_treatments" in result
+        assert "meta_compounds" in result
+
+    def test_generate_report_with_overlap(self, tmp_path):
+        """Report includes overlap stats when provided."""
+        from src.data.audit import _generate_report
+
+        overlap = {
+            "morph_treatments": 500,
+            "expr_treatments": 400,
+            "meta_compounds": 300,
+            "morph_expr_overlap": 200,
+            "morph_meta_overlap": 250,
+            "expr_meta_overlap": 180,
+            "all_three_overlap": 150,
+        }
+        output = tmp_path / "report.md"
+        result = _generate_report(None, None, None, overlap, output)
+        content = result.read_text()
+        assert "150" in content
+
+    def test_generate_report_with_expr_stats(self, tmp_path):
+        """Report includes expression stats when provided."""
+        from src.data.audit import _generate_report
+
+        expr_stats = {
+            "level_5": {
+                "file": "level_5_modz.gctx",
+                "n_samples": 9482,
+                "n_genes": 978,
+                "mean": 0.001,
+                "std": 1.023,
+                "nan_rate": 0.0,
+            }
+        }
+        output = tmp_path / "report.md"
+        result = _generate_report(None, expr_stats, None, None, output)
+        content = result.read_text()
+        assert "9,482" in content
+        assert "Level 5" in content
 
     def test_run_audit_creates_report(
         self, mock_morph_csv, mock_metadata_tsv, tmp_path
@@ -435,6 +666,132 @@ class TestBuildDataloaders:
         assert len(batch["metadata"]) == bs
 
 
+# ── Preprocessing: Edge cases ─────────────────────────────────
+
+
+class TestLoadMorphologyEdgeCases:
+    """Edge case tests for _load_morphology."""
+
+    def test_raises_on_empty_dir(self, tmp_path):
+        """FileNotFoundError when no CSVs in directory."""
+        empty_dir = tmp_path / "empty_morph"
+        empty_dir.mkdir()
+        from src.data.preprocess import _load_morphology
+
+        with pytest.raises(FileNotFoundError):
+            _load_morphology(empty_dir)
+
+    def test_raises_on_missing_brd_col(self, tmp_path):
+        """KeyError when Metadata_broad_sample is missing."""
+        morph_dir = tmp_path / "morphology"
+        morph_dir.mkdir()
+        df = pd.DataFrame({"other_col": ["a", "b"], "Cells_F0": [1.0, 2.0]})
+        df.to_csv(morph_dir / "batch.csv", index=False)
+        from src.data.preprocess import _load_morphology
+
+        with pytest.raises(KeyError, match="Metadata_broad_sample"):
+            _load_morphology(morph_dir)
+
+
+class TestGetScaffoldEdgeCases:
+    """Edge case tests for scaffold extraction."""
+
+    def test_invalid_smiles_returns_input(self):
+        """Invalid SMILES should fallback to original string."""
+        from src.data.preprocess import _get_scaffold
+
+        result = _get_scaffold("NOT_A_SMILES")
+        assert result == "NOT_A_SMILES"
+
+    def test_valid_smiles_returns_scaffold(self):
+        """Valid SMILES should return a scaffold."""
+        from src.data.preprocess import _get_scaffold
+
+        result = _get_scaffold("c1ccc(NC(=O)c2ccccc2)cc1")
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+
+class TestValidateSmiles:
+    """Tests for _validate_smiles."""
+
+    def test_numeric_sentinel(self):
+        """Numeric sentinel values like -666 return False."""
+        from src.data.preprocess import _validate_smiles
+
+        assert _validate_smiles("-666") is False
+        assert _validate_smiles("123") is False
+
+    def test_empty_string(self):
+        """Empty string returns False."""
+        from src.data.preprocess import _validate_smiles
+
+        assert _validate_smiles("") is False
+
+    def test_valid_smiles(self):
+        """Valid SMILES returns True."""
+        from src.data.preprocess import _validate_smiles
+
+        assert _validate_smiles("CCO") is True
+
+
+class TestStripCxsmiles:
+    """Tests for _strip_cxsmiles edge cases."""
+
+    def test_non_string_passthrough(self):
+        """Non-string input is returned as-is."""
+        from src.data.preprocess import _strip_cxsmiles
+
+        assert _strip_cxsmiles(None) is None
+        assert _strip_cxsmiles(42) == 42
+
+
+class TestMatchTreatmentsSmilesDropped:
+    """Test that match_treatments drops rows with unresolvable SMILES."""
+
+    def test_drops_missing_smiles(self):
+        """Rows with no SMILES source are dropped."""
+        from src.data.preprocess import match_treatments
+
+        morph_df = pd.DataFrame(
+            {
+                "compound_id": ["BRD-K00000001", "BRD-K00000002"],
+                "Cells_F0": [1.0, 2.0],
+            }
+        )
+        expr_df = pd.DataFrame(
+            {
+                "pert_id": ["BRD-K00000001", "BRD-K00000002"],
+                "gene_0_at": [0.1, 0.2],
+            }
+        )
+        # meta_df has SMILES only for one compound
+        meta_df = pd.DataFrame(
+            {
+                "broad_id": ["BRD-K00000001"],
+                "smiles": ["CCO"],
+                "compound_id": ["BRD-K00000001"],
+            }
+        )
+        result = match_treatments(morph_df, expr_df, meta_df)
+        # Only the compound with valid SMILES survives
+        assert len(result) <= 2
+        assert result["smiles"].notna().all()
+
+
+class TestLoadMetadata:
+    """Tests for _load_metadata."""
+
+    def test_loads_metadata(self, mock_metadata_for_preprocess):
+        """Metadata loaded with compound_id from broad_id."""
+        from src.data.preprocess import _load_metadata
+
+        df = _load_metadata(mock_metadata_for_preprocess)
+        assert "compound_id" in df.columns
+        assert len(df) == 50
+        assert all(len(cid) == 13 for cid in df["compound_id"])
+
+
 # ── Preprocessing: Data loaders (FR-2.0) ─────────────────────
 
 
@@ -447,9 +804,7 @@ class TestLoadMorphology:
 
         df = _load_morphology(mock_morph_batches)
         feature_cols = [
-            c
-            for c in df.columns
-            if c.startswith(("Cells_", "Cytoplasm_", "Nuclei_"))
+            c for c in df.columns if c.startswith(("Cells_", "Cytoplasm_", "Nuclei_"))
         ]
         # 8 shared features, no batch-only features
         assert len(feature_cols) == 8
@@ -731,9 +1086,7 @@ class TestFeatureQC:
         mock_matched_df.loc[50, "Cells_Feature_3"] = np.inf
         result, _ = feature_qc(mock_matched_df)
         feature_cols = [
-            c
-            for c in result.columns
-            if c.startswith("Cells_") or c.endswith("_at")
+            c for c in result.columns if c.startswith("Cells_") or c.endswith("_at")
         ]
         assert not np.isinf(result[feature_cols].values).any()
 
@@ -814,26 +1167,40 @@ class TestScaffoldSplit:
         from src.data.preprocess import scaffold_split
 
         ring_smiles = [
-            "c1ccccc1", "c1ccncc1", "c1ccoc1", "c1ccsc1",
-            "c1cc2ccccc2cc1", "c1ccc2[nH]ccc2c1", "C1CCCCC1",
-            "C1CCNCC1", "c1ccc(-c2ccccc2)cc1", "c1cnc2ccccc2n1",
-            "c1ccc2ncccc2c1", "c1ccc2c(c1)ccc1ccccc12",
-            "C1CCC2(CC1)CCCC2", "c1ccc(-c2ccccn2)cc1",
-            "c1ccc2[nH]ncc2c1", "c1ccc2occc2c1", "c1ccc2sccc2c1",
-            "C1CC2CCCC(C1)C2", "c1ccc(-c2ccco2)cc1",
-            "c1ccc2c(c1)CCCC2", "c1ccnc(-c2ccccc2)c1",
-            "c1ccc(-c2cccs2)cc1", "c1ccc2c(c1)occc2=O",
-            "c1ccc(-c2ccc3ccccc3n2)cc1", "C1CCC(CC1)c1ccccc1",
-            "c1ccc2c(c1)CC=C2", "c1ccc(-c2cnccn2)cc1",
+            "c1ccccc1",
+            "c1ccncc1",
+            "c1ccoc1",
+            "c1ccsc1",
+            "c1cc2ccccc2cc1",
+            "c1ccc2[nH]ccc2c1",
+            "C1CCCCC1",
+            "C1CCNCC1",
+            "c1ccc(-c2ccccc2)cc1",
+            "c1cnc2ccccc2n1",
+            "c1ccc2ncccc2c1",
+            "c1ccc2c(c1)ccc1ccccc12",
+            "C1CCC2(CC1)CCCC2",
+            "c1ccc(-c2ccccn2)cc1",
+            "c1ccc2[nH]ncc2c1",
+            "c1ccc2occc2c1",
+            "c1ccc2sccc2c1",
+            "C1CC2CCCC(C1)C2",
+            "c1ccc(-c2ccco2)cc1",
+            "c1ccc2c(c1)CCCC2",
+            "c1ccnc(-c2ccccc2)c1",
+            "c1ccc(-c2cccs2)cc1",
+            "c1ccc2c(c1)occc2=O",
+            "c1ccc(-c2ccc3ccccc3n2)cc1",
+            "C1CCC(CC1)c1ccccc1",
+            "c1ccc2c(c1)CC=C2",
+            "c1ccc(-c2cnccn2)cc1",
         ]
         df = pd.DataFrame(
             {
                 "compound_id": ["BRD-K00000001"] * 3
                 + ["BRD-K00000002"] * 2
                 + [f"BRD-K{i:08d}" for i in range(3, 30)],
-                "smiles": ["c1ccccc1"] * 3
-                + ["c1ccncc1"] * 2
-                + ring_smiles[:27],
+                "smiles": ["c1ccccc1"] * 3 + ["c1ccncc1"] * 2 + ring_smiles[:27],
                 "Cells_F0": np.random.randn(32),
             }
         )

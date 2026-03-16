@@ -71,14 +71,10 @@ def _load_morphology(morph_dir: Path) -> pd.DataFrame:
     feature_sets = []
     for f in csv_files:
         df = pd.read_csv(f, low_memory=False)
-        features = [
-            c for c in df.columns if c.startswith(_CELLPROFILER_PREFIXES)
-        ]
+        features = [c for c in df.columns if c.startswith(_CELLPROFILER_PREFIXES)]
         feature_sets.append(set(features))
         dfs.append(df)
-        logger.info(
-            "Loaded %s: %d rows, %d features", f.name, len(df), len(features)
-        )
+        logger.info("Loaded %s: %d rows, %d features", f.name, len(df), len(features))
 
     # Intersect feature columns across all files
     shared_features = sorted(set.intersection(*feature_sets))
@@ -165,9 +161,7 @@ def _load_expression(
             sample_ids = set(expr_t["inst_id"].astype(str))
             if set(col_meta[first_col].astype(str).head(100)) & sample_ids:
                 col_meta = col_meta.rename(columns={first_col: "inst_id"})
-                logger.info(
-                    "Renamed col_meta column '%s' to 'inst_id'", first_col
-                )
+                logger.info("Renamed col_meta column '%s' to 'inst_id'", first_col)
             else:
                 logger.warning(
                     "inst_id not found in col_meta columns: %s",
@@ -195,9 +189,7 @@ def _load_expression(
     pert_info_files = list(expr_dir.glob("*pert_info*"))
     pert_info_df = pd.DataFrame()
     if pert_info_files:
-        pert_info_df = pd.read_csv(
-            pert_info_files[0], sep="\t", low_memory=False
-        )
+        pert_info_df = pd.read_csv(pert_info_files[0], sep="\t", low_memory=False)
         logger.info("Loaded pert_info: %d entries", len(pert_info_df))
 
     return expr_t, pert_info_df
@@ -226,9 +218,7 @@ def replicate_filter(
 
     Pass-through: data arrives pre-aggregated as consensus MODZ profiles.
     """
-    logger.info(
-        "FR-2.1 replicate_filter: pass-through (data is pre-aggregated MODZ)"
-    )
+    logger.info("FR-2.1 replicate_filter: pass-through (data is pre-aggregated MODZ)")
     return df
 
 
@@ -237,9 +227,7 @@ def aggregate_modz(df: pd.DataFrame) -> pd.DataFrame:
 
     Pass-through: data arrives pre-aggregated as consensus MODZ profiles.
     """
-    logger.info(
-        "FR-2.2 aggregate_modz: pass-through (data is pre-aggregated MODZ)"
-    )
+    logger.info("FR-2.2 aggregate_modz: pass-through (data is pre-aggregated MODZ)")
     return df
 
 
@@ -375,9 +363,7 @@ def _resolve_moa(
             pert_info_df = pert_info_df.copy()
             pert_info_df["_cid"] = pert_info_df["pert_id"].astype(str).str[:13]
             moa_map = (
-                pert_info_df.dropna(subset=["moa"])
-                .set_index("_cid")["moa"]
-                .to_dict()
+                pert_info_df.dropna(subset=["moa"]).set_index("_cid")["moa"].to_dict()
             )
             moa = df["compound_id"].map(moa_map)
             s1_count = moa.notna().sum()
@@ -720,9 +706,7 @@ def scaffold_split(
     for group in groups:
         group_size = sum(rows_per_compound.get(cid, 0) for cid in group)
         # Assign to split furthest below target
-        best_split = min(
-            counts, key=lambda s: counts[s] / max(targets[s], 1e-9)
-        )
+        best_split = min(counts, key=lambda s: counts[s] / max(targets[s], 1e-9))
         for cid in group:
             compound_to_split[cid] = best_split
         counts[best_split] += group_size
@@ -732,9 +716,7 @@ def scaffold_split(
     # Log split sizes
     for split_name in ["train", "val", "test"]:
         n = (df["split"] == split_name).sum()
-        logger.info(
-            "Split %s: %d rows (%.1f%%)", split_name, n, n / len(df) * 100
-        )
+        logger.info("Split %s: %d rows (%.1f%%)", split_name, n, n / len(df) * 100)
 
     return df
 
@@ -904,9 +886,7 @@ def run_preprocessing_pipeline(config) -> None:
     matched = remove_controls(matched)
 
     # 5. Feature QC phase A (FR-2.5)
-    nan_threshold = OmegaConf.select(
-        config, "processing.nan_threshold", default=0.05
-    )
+    nan_threshold = OmegaConf.select(config, "processing.nan_threshold", default=0.05)
     matched, feature_cols = feature_qc(matched, nan_threshold=nan_threshold)
 
     # 6. Scaffold split (FR-2.6)

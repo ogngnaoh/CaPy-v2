@@ -6,16 +6,30 @@ build-backend = "setuptools.build_meta"
 name = "capy-v2"
 version = "0.1.0"
 description = "Tri-modal contrastive learning for drug discovery"
-readme = "capy_v2_prd.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "Hoang Ngo"}]
-
+keywords = [
+    "contrastive-learning",
+    "drug-discovery",
+    "multi-modal",
+    "cell-painting",
+    "L1000",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
 dependencies = [
     "torch>=2.0",
     "hydra-core>=1.3",
     "omegaconf>=2.3",
-    "wandb>=0.16",
     "rdkit>=2023.9",
     "pandas>=2.0",
     "numpy>=1.24",
@@ -29,6 +43,11 @@ dependencies = [
     "requests>=2.31",
     "cmapPy>=4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/hoangngo610/CaPy-v2"
+Repository = "https://github.com/hoangngo610/CaPy-v2"
+Issues = "https://github.com/hoangngo610/CaPy-v2/issues"
 
 [project.optional-dependencies]
 dev = [

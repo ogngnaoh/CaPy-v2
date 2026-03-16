@@ -6,6 +6,7 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 
 from src.data.audit import run_audit
@@ -15,7 +16,7 @@ from src.data.download import (
     download_metadata,
     download_morphology,
 )
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, setup_log_level
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,17 @@ def main():
         action="store_true",
         help="Skip data audit after download.",
     )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "--verbose", action="store_true", help="Enable debug logging"
+    )
+    verbosity.add_argument("--quiet", action="store_true", help="Suppress info logging")
     args = parser.parse_args()
+
+    if args.verbose:
+        setup_log_level(logging.DEBUG)
+    elif args.quiet:
+        setup_log_level(logging.WARNING)
 
     if args.source:
         try:

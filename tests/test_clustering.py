@@ -89,9 +89,7 @@ class TestMOAClustering:
         torch.manual_seed(42)
         embeddings = f.normalize(torch.randn(30, 256), dim=-1)
         moa_labels = [f"moa_{i % 3}" for i in range(30)]
-        metrics = compute_moa_clustering(
-            embeddings, moa_labels, k_values=[3, 7]
-        )
+        metrics = compute_moa_clustering(embeddings, moa_labels, k_values=[3, 7])
         assert "kNN_3_acc" in metrics
         assert "kNN_7_acc" in metrics
         assert "kNN_5_acc" not in metrics
@@ -102,8 +100,6 @@ class TestMOAClustering:
         embeddings = f.normalize(torch.randn(8, 256), dim=-1)
         moa_labels = [f"moa_{i % 2}" for i in range(8)]
         # k=100 >> n_samples=8
-        metrics = compute_moa_clustering(
-            embeddings, moa_labels, k_values=[100]
-        )
+        metrics = compute_moa_clustering(embeddings, moa_labels, k_values=[100])
         assert "kNN_100_acc" in metrics
         assert 0.0 <= metrics["kNN_100_acc"] <= 1.0

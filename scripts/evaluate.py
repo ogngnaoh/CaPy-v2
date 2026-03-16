@@ -8,8 +8,9 @@ Usage:
 """
 
 import argparse
+import logging
 
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, setup_log_level
 
 logger = get_logger(__name__)
 
@@ -49,16 +50,24 @@ def main():
         default="results/",
         help="Path to output directory",
     )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "--verbose", action="store_true", help="Enable debug logging"
+    )
+    verbosity.add_argument("--quiet", action="store_true", help="Suppress info logging")
     args = parser.parse_args()
+
+    if args.verbose:
+        setup_log_level(logging.DEBUG)
+    elif args.quiet:
+        setup_log_level(logging.WARNING)
 
     logger.info("Starting evaluation")
 
     if args.full:
         from src.evaluation.report import generate_full_report
 
-        generate_full_report(
-            args.checkpoint, args.data_dir, args.output_dir
-        )
+        generate_full_report(args.checkpoint, args.data_dir, args.output_dir)
     else:
         import torch
 
@@ -107,9 +116,7 @@ def main():
                 embeddings.keys(), key=lambda m: {"mol": 0, "morph": 1, "expr": 2}[m]
             )
             for m_a, m_b in itertools.combinations(modalities, 2):
-                align = compute_alignment(
-                    embeddings[m_a], embeddings[m_b]
-                )
+                align = compute_alignment(embeddings[m_a], embeddings[m_b])
                 logger.info("Alignment %s-%s: %.4f", m_a, m_b, align)
             for m in modalities:
                 unif = compute_uniformity(embeddings[m])
@@ -133,28 +140,19 @@ def main():
                 idx = id_to_idx[cid]
                 compound_emb[idx] += embeddings[first_mod][i]
                 counts[idx] += 1
-                if (
-                    compound_moas[idx] is None
-                    and moa_labels[i] is not None
-                ):
+                if compound_moas[idx] is None and moa_labels[i] is not None:
                     compound_moas[idx] = moa_labels[i]
 
             compound_emb /= counts.unsqueeze(1)
-            compound_emb = torch.nn.functional.normalize(
-                compound_emb, dim=-1
-            )
+            compound_emb = torch.nn.functional.normalize(compound_emb, dim=-1)
 
-            clustering_metrics = compute_moa_clustering(
-                compound_emb, compound_moas
-            )
+            clustering_metrics = compute_moa_clustering(compound_emb, compound_moas)
             for k, v in clustering_metrics.items():
                 logger.info("MOA %s: %.4f", k, v)
 
         else:
             # Default: retrieval metrics only
-            metrics = compute_all_metrics(
-                embeddings, compound_ids, moa_labels
-            )
+            metrics = compute_all_metrics(embeddings, compound_ids, moa_labels)
             print_summary_table(metrics)
 
 

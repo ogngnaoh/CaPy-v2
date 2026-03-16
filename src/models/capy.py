@@ -62,9 +62,7 @@ class CaPyModel(nn.Module):
         )
         for m in self.modalities:
             enc_params = sum(p.numel() for p in self.encoders[m].parameters())
-            proj_params = sum(
-                p.numel() for p in self.projections[m].parameters()
-            )
+            proj_params = sum(p.numel() for p in self.projections[m].parameters())
             logger.info(
                 "  %s: encoder=%d params, projection=%d params",
                 m,

@@ -1,12 +1,16 @@
 """Tests for scripts/summarize_ablations.py (FR-9.2)."""
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+
+# scripts/ is not a package — add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.summarize_ablations import (
     compute_summary,
@@ -175,8 +179,7 @@ class TestEdgeCases:
         summary = compute_summary(df)
 
         b0_primary = summary[
-            (summary["config"] == "B0")
-            & (summary["metric"] == "compound/mean_R@10")
+            (summary["config"] == "B0") & (summary["metric"] == "compound/mean_R@10")
         ]
         assert len(b0_primary) == 1
         assert np.isnan(b0_primary.iloc[0]["std"])

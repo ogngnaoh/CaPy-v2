@@ -3,10 +3,6 @@ optimizer:
   name: adamw
   lr: 5.0e-4
   weight_decay: 1.0e-3
-  modality_lr_mult:  # Multipliers applied to base LR
-    mol: 1.0
-    morph: 1.0
-    expr: 1.0
 
 scheduler:
   name: cosine
@@ -25,9 +21,6 @@ loss:
     mol_morph: 2.0
     mol_expr: 2.0
     morph_expr: 1.0
-  curriculum:
-    enabled: false
-    warmup_epochs: 50  # Epochs to linearly ramp mol pair weights from 0 to target
 
 scarf:
   enabled: true
@@ -35,10 +28,3 @@ scarf:
 
 mixed_precision: true  # bfloat16 if CUDA available
 num_workers: 4
-
-staged:
-  enabled: false
-  stage1_epochs: 100
-  stage1_modalities: [morph, expr]
-  stage2_freeze: [morph, expr]
-  stage2_lr_mult: 0.1  # Reduce LR for unfrozen layers in stage 2

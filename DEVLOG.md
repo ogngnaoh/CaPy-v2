@@ -5,6 +5,68 @@
 
 ---
 
+### 2026-03-15 — [PHASE 4] Polish & Ship — README, report, CI, Docker, demo, tests
+
+**Phase 4 complete — repo presentable, reproducible, CI-ready.**
+
+**New files:**
+- `README.md`: Project overview with results tables, architecture, quick start, ablation design
+- `TECHNICAL_REPORT.md`: 2-3 page research write-up (mini-paper format)
+- `Dockerfile` + `.dockerignore`: CPU-only Docker image for running tests
+- `.github/workflows/test.yml`: GitHub Actions CI (lint + test on push/PR)
+- `notebooks/demo.ipynb`: CPU-only demo notebook with synthetic data
+- `tests/test_seeding.py`: Tests for `seed_everything()` including CUDA branch
+
+**Test coverage audit:**
+- Added 33 new tests across 5 files (238 total, up from 205)
+- Overall coverage: 90% (up from 81%)
+- All `src/` modules at ≥80%: audit 83%, download 94%, preprocess 80%, report 91%, seeding 100%
+
+**pyproject.toml + Makefile polish:**
+- `readme` field → `README.md`, added classifiers, keywords, project URLs
+- New Make targets: `format`, `coverage`, `clean`
+
+---
+
+### 2026-03-15 — [CLEANUP] FR-11.0 logging, W&B removal, dead code cleanup
+
+**Phase 4 polish — formalize local-only logging, remove unused features.**
+
+**Logging enhancements (FR-11.0):**
+- `src/utils/logging.py`: added `setup_log_level()` and `setup_file_logging()`
+- All 6 scripts now support `--verbose`/`--quiet` flags
+- `scripts/preprocess.py` now has argparse
+- `scripts/train.py` writes per-run log file to `results/{config}_seed{seed}_train.log`
+- `Trainer._save_run_metrics()` writes structured JSON to `results/{config}_seed{seed}_metrics.json`
+
+**W&B removal (never used in practice):**
+- Removed W&B init/finish blocks from `scripts/train.py`
+- Removed `_log_to_wandb()` and `_log_collapse_to_wandb()` from trainer
+- Removed `wandb>=0.16` from `pyproject.toml`, `wandb/` from `.gitignore`
+- Removed `project_name` and `wandb` keys from `configs/default.yaml`
+- Removed W&B login cell from Colab notebook
+
+**Dead feature removal:**
+- Removed curriculum learning (config, trainer logic, tests)
+- Removed staged training (config, `staged.yaml`, trainer logic, tests)
+- Removed `modality_lr_mult` from `configs/training/default.yaml`
+- Deleted `scripts/verify_signal.py`, `scripts/analyze_checkpoints.py`, `scripts/diagnose.py`
+- Removed 3 sweep cells from Colab notebook (S4 curriculum, S5 staged, S27 analyze)
+
+**Tests:** 205 pass (5 new logging tests, removed curriculum/staged test classes)
+**Documentation:** Updated FSD, PRD, CLAUDE.md to reflect all changes
+
+---
+
+### 2026-03-15 18:02 — [MILESTONE] FR-10.0 config management gaps closed
+- **Branch:** `main` | **Commit:** `0961c5c`
+- Replaced `NotImplementedError` stubs in `src/utils/config.py` with `get_git_hash()` and `save_config_yaml()`
+- `src/training/trainer.py` now saves `.yaml` alongside `.pt` checkpoints (FR-10.1)
+- `scripts/train.py` logs git commit hash to console and per-run metrics (FR-10.2)
+- 4 new tests added to `tests/test_training.py` — all 25/25 pass
+
+---
+
 ### 2026-03-15 — [AUDIT] Phase 3 COMPLETE — documentation alignment & status correction
 
 **What happened:** Deep audit confirmed Phase 3 is fully complete (24/24 runs, including B0-B3 baselines).

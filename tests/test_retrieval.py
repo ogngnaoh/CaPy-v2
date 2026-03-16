@@ -66,9 +66,7 @@ class TestRetrievalMetrics:
         z_b = f.normalize(torch.randn(16, 256), dim=-1)
         metrics = compute_all_retrieval_metrics({"mol": z_a, "morph": z_b})
         r10_values = [v for k, v in metrics.items() if k.endswith("/R@10")]
-        assert metrics["mean_R@10"] == pytest.approx(
-            sum(r10_values) / len(r10_values)
-        )
+        assert metrics["mean_R@10"] == pytest.approx(sum(r10_values) / len(r10_values))
 
     def test_bi_modal_two_directions(self):
         """Bi-modal should produce exactly 2 directions."""
@@ -105,9 +103,7 @@ class TestCompoundRetrievalMetrics:
         assert row_metrics["R@1"] < 1.0
 
         # Compound-level: R@1 should be 1.0 after dedup
-        compound_metrics = compute_compound_retrieval_metrics(
-            z_a, z_b, compound_ids
-        )
+        compound_metrics = compute_compound_retrieval_metrics(z_a, z_b, compound_ids)
         assert compound_metrics["R@1"] == pytest.approx(1.0)
 
     def test_unique_ids_matches_row_level(self):
@@ -119,12 +115,8 @@ class TestCompoundRetrievalMetrics:
         unique_ids = [f"BRD-{i:04d}" for i in range(n)]
 
         row_metrics = compute_retrieval_metrics(z_a, z_b)
-        compound_metrics = compute_compound_retrieval_metrics(
-            z_a, z_b, unique_ids
-        )
-        assert compound_metrics["R@10"] == pytest.approx(
-            row_metrics["R@10"], abs=1e-6
-        )
+        compound_metrics = compute_compound_retrieval_metrics(z_a, z_b, unique_ids)
+        assert compound_metrics["R@10"] == pytest.approx(row_metrics["R@10"], abs=1e-6)
 
     def test_n_compounds_returned(self):
         """Metrics should include n_compounds count."""
@@ -139,9 +131,7 @@ class TestCompoundRetrievalMetrics:
         z = f.normalize(torch.randn(8, 256), dim=-1)
         embeddings = {"mol": z, "morph": z.clone()}
         compound_ids = ["A", "A", "B", "B", "C", "C", "D", "D"]
-        metrics = compute_all_compound_retrieval_metrics(
-            embeddings, compound_ids
-        )
+        metrics = compute_all_compound_retrieval_metrics(embeddings, compound_ids)
         assert "compound/mean_R@10" in metrics
         assert "compound/random_R@10" in metrics
         assert "compound/mol->morph/R@10" in metrics

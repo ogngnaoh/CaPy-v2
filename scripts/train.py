@@ -5,13 +5,16 @@ Usage:
     python scripts/train.py model=bi_mol_morph training.batch_size=128 seed=42
 """
 
+import logging
 import os
+from pathlib import Path
 
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf, open_dict
 
-from src.utils.logging import get_logger
+from src.utils.config import get_git_hash
+from src.utils.logging import get_logger, setup_file_logging, setup_log_level
 from src.utils.seeding import seed_everything
 
 logger = get_logger(__name__)
@@ -22,30 +25,26 @@ def main(config: DictConfig) -> None:
     # Hydra changes CWD — restore original so data paths resolve
     os.chdir(hydra.utils.get_original_cwd())
 
+    # Set log level from config (--verbose / --quiet via Hydra overrides)
+    if config.get("verbose", False):
+        setup_log_level(logging.DEBUG)
+    elif config.get("quiet", False):
+        setup_log_level(logging.WARNING)
+
+    # Set up per-run file logging
+    results_dir = Path("results")
+    results_dir.mkdir(parents=True, exist_ok=True)
+    log_file = results_dir / f"{config.model.name}_seed{config.seed}_train.log"
+    setup_file_logging(log_file)
+
     logger.info("Config:\n%s", OmegaConf.to_yaml(config))
+
+    # Log git hash (FR-10.2)
+    git_hash = get_git_hash()
+    logger.info("Git hash: %s", git_hash or "not a git repo")
 
     # Seed all random sources
     seed_everything(config.seed)
-
-    # W&B init (opt-in via config.wandb=true or CLI wandb=true)
-    if config.get("wandb", False):
-        try:
-            import wandb
-
-            wandb.init(
-                project=config.project_name,
-                name=f"{config.model.name}_seed{config.seed}",
-                config=OmegaConf.to_container(config, resolve=True),
-                tags=[
-                    f"config={config.model.name}",
-                    f"seed={config.seed}",
-                    "dataset=lincs",
-                ],
-            )
-        except ImportError:
-            logger.warning("wandb not installed, skipping")
-    else:
-        logger.info("W&B disabled (set wandb=true to enable)")
 
     # Build dataloaders
     from src.data.dataset import build_dataloaders
@@ -125,9 +124,7 @@ def main(config: DictConfig) -> None:
     siglip_params = []
     for fn in siglip_loss_fns.values():
         siglip_params.extend(fn.parameters())
-    param_groups.append(
-        {"params": siglip_params, "lr": config.training.optimizer.lr}
-    )
+    param_groups.append({"params": siglip_params, "lr": config.training.optimizer.lr})
     optimizer = torch.optim.AdamW(
         param_groups, weight_decay=config.training.optimizer.weight_decay
     )
@@ -164,16 +161,6 @@ def main(config: DictConfig) -> None:
     best_metrics = trainer.train()
 
     logger.info("Best metrics: %s", best_metrics)
-
-    # Finish W&B
-    if config.get("wandb", False):
-        try:
-            import wandb
-
-            if wandb.run is not None:
-                wandb.finish()
-        except ImportError:
-            pass
 
 
 if __name__ == "__main__":

@@ -19,8 +19,8 @@ build/
 venv/
 
 # Tools
-wandb/
 .ruff_cache/
+htmlcov/
 
 # Worktrees
 .worktrees/

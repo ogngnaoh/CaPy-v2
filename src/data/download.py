@@ -86,7 +86,6 @@ def _download_file(
     return dest
 
 
-
 def download_morphology(target_dir: str = "data/raw/morphology/") -> Path:
     """Download Cell Painting consensus MODZ profiles (FR-1.1).
 

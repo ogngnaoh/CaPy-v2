@@ -1,7 +1,11 @@
-"""Tests for training loop (FR-7)."""
+"""Tests for training loop (FR-7) and config utilities (FR-10)."""
+
+import re
+from pathlib import Path
 
 import pytest
 import torch
+import yaml
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
@@ -9,6 +13,7 @@ from src.data.dataset import collate_fn
 from src.models.capy import CaPyModel
 from src.models.losses import SigLIPLoss, VICRegLoss
 from src.training.trainer import Trainer
+from src.utils.config import get_git_hash, save_config_yaml
 
 # ── Fixtures ─────────────────────────────────────────────────
 
@@ -48,7 +53,6 @@ class _SyntheticDataset(Dataset):
 def _make_tiny_config(tmp_path, **overrides):
     cfg = {
         "seed": 42,
-        "project_name": "test",
         "model": {
             "name": "test_model",
             "modalities": ["mol", "morph", "expr"],
@@ -93,17 +97,9 @@ def _make_tiny_config(tmp_path, **overrides):
                     "mol_expr": 1.0,
                     "morph_expr": 1.0,
                 },
-                "curriculum": {"enabled": False, "warmup_epochs": 50},
             },
             "mixed_precision": False,
             "num_workers": 0,
-            "staged": {
-                "enabled": False,
-                "stage1_epochs": 100,
-                "stage1_modalities": ["morph", "expr"],
-                "stage2_freeze": ["morph", "expr"],
-                "stage2_lr_mult": 0.1,
-            },
         },
         "checkpoint_dir": str(tmp_path / "checkpoints"),
     }
@@ -138,9 +134,7 @@ def _build_trainer(config):
     for fn in siglip_fns.values():
         siglip_params.extend(fn.parameters())
     all_params = list(model.parameters()) + siglip_params
-    optimizer = torch.optim.AdamW(
-        all_params, lr=config.training.optimizer.lr
-    )
+    optimizer = torch.optim.AdamW(all_params, lr=config.training.optimizer.lr)
     warmup = torch.optim.lr_scheduler.LinearLR(
         optimizer, start_factor=0.01, total_iters=1
     )
@@ -313,101 +307,103 @@ class TestFullTraining:
         assert result["best_epoch"] >= 1
 
 
-class TestStagedTraining:
-    """Tests for staged training (stage1 morph+expr, stage2 all)."""
+class TestSaveRunMetrics:
+    """Tests for _save_run_metrics."""
 
-    def test_stage_transition_freezes_encoders(self, tmp_path):
-        """After transition, morph/expr encoder params should be frozen."""
-        config = _make_tiny_config(
-            tmp_path,
-            training={
-                "staged": {
-                    "enabled": True,
-                    "stage1_epochs": 1,
-                    "stage1_modalities": ["morph", "expr"],
-                    "stage2_freeze": ["morph", "expr"],
-                    "stage2_lr_mult": 0.1,
-                },
-                "epochs": 3,
-            },
-        )
+    def test_creates_json(self, tmp_path):
+        """_save_run_metrics should create a JSON file with expected keys."""
+        import json
+
+        config = _make_tiny_config(tmp_path)
         t = _build_trainer(config)
-        # Initially all params are trainable
-        for p in t.model.encoders["morph"].parameters():
-            assert p.requires_grad is True
+        t.best_epoch = 3
+        t.best_metric = 0.42
 
-        # Run training — stage transition happens at epoch 1
-        t.train()
+        t._save_run_metrics({"mean_R@10": 0.42, "val_loss": 0.5})
 
-        # After stage 2, morph/expr should be frozen
-        for p in t.model.encoders["morph"].parameters():
-            assert p.requires_grad is False
-        for p in t.model.encoders["expr"].parameters():
-            assert p.requires_grad is False
-        # mol should remain trainable
-        for p in t.model.encoders["mol"].parameters():
-            assert p.requires_grad is True
-
-    def test_staged_training_completes(self, tmp_path):
-        """Staged training should complete without errors."""
-        config = _make_tiny_config(
-            tmp_path,
-            training={
-                "staged": {
-                    "enabled": True,
-                    "stage1_epochs": 2,
-                    "stage1_modalities": ["morph", "expr"],
-                    "stage2_freeze": ["morph", "expr"],
-                    "stage2_lr_mult": 0.1,
-                },
-                "epochs": 3,
-            },
-        )
-        t = _build_trainer(config)
-        result = t.train()
-        assert "best_mean_R@10" in result
+        out = Path("results") / f"{config.model.name}_seed{config.seed}_metrics.json"
+        assert out.exists()
+        data = json.loads(out.read_text())
+        assert data["config_name"] == "test_model"
+        assert data["seed"] == 42
+        assert data["best_epoch"] == 3
+        assert data["best_metric"] == 0.42
+        assert "timestamp" in data
+        assert "git_hash" in data
 
 
-class TestCurriculumWeighting:
-    """Tests for curriculum loss weighting."""
+class TestNaNLossDetection:
+    """Tests for NaN loss detection (Edge 5.2)."""
 
-    def test_curriculum_ramps_mol_weights(self, tmp_path):
-        """Curriculum should start with 0 mol weight and ramp to target."""
-        config = _make_tiny_config(
-            tmp_path,
-            training={
-                "loss": {
-                    "curriculum": {"enabled": True, "warmup_epochs": 10},
-                    "pair_weights": {
-                        "mol_morph": 2.0,
-                        "mol_expr": 2.0,
-                        "morph_expr": 1.0,
-                    },
-                },
-            },
-        )
+    def test_nan_loss_raises(self, tmp_path, monkeypatch):
+        """NaN loss should raise RuntimeError."""
+        config = _make_tiny_config(tmp_path)
         t = _build_trainer(config)
 
-        # At epoch 1, ramp = 1/10 = 0.1 → mol weights = 2.0 * 0.1 = 0.2
-        pair_weights = dict(t.pair_weights)
-        ramp = 1 / 10
-        for key in list(pair_weights.keys()):
-            if "mol" in key:
-                pair_weights[key] = pair_weights[key] * ramp
-        assert abs(pair_weights["mol_morph"] - 0.2) < 1e-6
-        assert abs(pair_weights["morph_expr"] - 1.0) < 1e-6
+        # Monkeypatch model forward to produce NaN
+        def _nan_forward(batch):
+            embeddings = {
+                m: torch.full((4, 16), float("nan")) for m in config.model.modalities
+            }
+            encoder_outputs = {
+                m: torch.full((4, 32), float("nan")) for m in config.model.modalities
+            }
+            return embeddings, encoder_outputs
 
-    def test_curriculum_training_completes(self, tmp_path):
-        """Curriculum training should complete without errors."""
-        config = _make_tiny_config(
-            tmp_path,
-            training={
-                "loss": {
-                    "curriculum": {"enabled": True, "warmup_epochs": 2},
-                },
-                "epochs": 3,
-            },
-        )
+        monkeypatch.setattr(t.model, "forward", _nan_forward)
+        with pytest.raises(RuntimeError, match="NaN loss"):
+            t.train_epoch(1)
+
+
+# ── Config utility tests (FR-10) ─────────────────────────────
+
+
+class TestGetGitHash:
+    """Tests for get_git_hash (FR-10.2)."""
+
+    def test_returns_40_char_hex(self):
+        """In a git repo, should return a 40-char hex string."""
+        result = get_git_hash()
+        assert result is not None
+        assert re.fullmatch(r"[0-9a-f]{40}", result)
+
+
+class TestSaveConfigYaml:
+    """Tests for save_config_yaml (FR-10.1)."""
+
+    def test_roundtrip(self, tmp_path):
+        """Save config, load it back, verify equality."""
+        config = OmegaConf.create({"seed": 42, "model": {"name": "test", "dim": 256}})
+        path = tmp_path / "test_config.yaml"
+        save_config_yaml(config, path)
+
+        assert path.exists()
+        loaded = yaml.safe_load(path.read_text())
+        assert loaded["seed"] == 42
+        assert loaded["model"]["name"] == "test"
+        assert loaded["model"]["dim"] == 256
+
+    def test_creates_parent_dirs(self, tmp_path):
+        """Should create parent directories if they don't exist."""
+        path = tmp_path / "nested" / "dir" / "config.yaml"
+        config = OmegaConf.create({"key": "value"})
+        save_config_yaml(config, path)
+        assert path.exists()
+
+
+class TestCheckpointSavesConfigYaml:
+    """Tests for config YAML saved alongside checkpoint (FR-10.1)."""
+
+    def test_yaml_created_alongside_checkpoint(self, tmp_path):
+        """save_checkpoint should create a .yaml file next to the .pt file."""
+        config = _make_tiny_config(tmp_path)
         t = _build_trainer(config)
-        result = t.train()
-        assert "best_mean_R@10" in result
+        t.save_checkpoint(1, {"mean_R@10": 0.5})
+
+        yaml_path = t.checkpoint_path.with_suffix(".yaml")
+        assert yaml_path.exists()
+
+        loaded = yaml.safe_load(yaml_path.read_text())
+        assert loaded["seed"] == 42
+        assert loaded["model"]["name"] == "test_model"
+        assert "training" in loaded

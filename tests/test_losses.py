@@ -293,8 +293,7 @@ class TestPerPairSigLIP:
 
     def _make_embeddings(self, modalities, batch_size=16, dim=256):
         return {
-            m: f.normalize(torch.randn(batch_size, dim), dim=-1)
-            for m in modalities
+            m: f.normalize(torch.randn(batch_size, dim), dim=-1) for m in modalities
         }
 
     def _make_encoder_outputs(self, modalities, batch_size=16, dim=512):

@@ -4,6 +4,6 @@ defaults:
   - training: default
 
 seed: 42
-project_name: capy-v2
-wandb: false  # Set to true to enable W&B logging
 checkpoint_dir: checkpoints
+verbose: false
+quiet: false

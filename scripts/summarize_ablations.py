@@ -7,6 +7,7 @@ Usage:
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -17,7 +18,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, setup_log_level
 
 logger = get_logger(__name__)
 
@@ -251,11 +252,24 @@ def generate_barplot(df: pd.DataFrame, output_path: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
     x = np.arange(len(configs_present))
-    ax.bar(x, means, yerr=stds, capsize=4, color=colors, edgecolor="black", linewidth=0.5)
+    ax.bar(
+        x, means, yerr=stds, capsize=4, color=colors, edgecolor="black", linewidth=0.5
+    )
 
     # Random baseline reference line
-    random_r10 = df["compound/random_R@10"].dropna().iloc[0] * 100 if "compound/random_R@10" in df.columns else 5.6
-    ax.axhline(y=random_r10, color="red", linestyle="--", linewidth=1, alpha=0.7, label=f"Random ({random_r10:.1f}%)")
+    random_r10 = (
+        df["compound/random_R@10"].dropna().iloc[0] * 100
+        if "compound/random_R@10" in df.columns
+        else 5.6
+    )
+    ax.axhline(
+        y=random_r10,
+        color="red",
+        linestyle="--",
+        linewidth=1,
+        alpha=0.7,
+        label=f"Random ({random_r10:.1f}%)",
+    )
 
     ax.set_xticks(x)
     ax.set_xticklabels(configs_present)
@@ -295,7 +309,9 @@ def print_summary(df: pd.DataFrame, comparisons: list[dict]) -> None:
 
     # Statistical comparisons
     if comparisons:
-        print(f"\n{'Comparison':<16} {'Diff (%)':<12} {'t-stat':<10} {'p-value':<12} {'p-corrected':<14} {'Sig':<6}")
+        print(
+            f"\n{'Comparison':<16} {'Diff (%)':<12} {'t-stat':<10} {'p-value':<12} {'p-corrected':<14} {'Sig':<6}"
+        )
         print("-" * 70)
         for c in comparisons:
             diff_pct = c["diff"] * 100
@@ -305,7 +321,9 @@ def print_summary(df: pd.DataFrame, comparisons: list[dict]) -> None:
             )
 
         # Bonferroni note
-        print(f"\nBonferroni correction: α = 0.05/{len(comparisons)} = {0.05/len(comparisons):.4f}")
+        print(
+            f"\nBonferroni correction: α = 0.05/{len(comparisons)} = {0.05/len(comparisons):.4f}"
+        )
 
     print("=" * 80 + "\n")
 
@@ -324,7 +342,17 @@ def main():
         default=Path("results"),
         help="Output directory for summary files",
     )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "--verbose", action="store_true", help="Enable debug logging"
+    )
+    verbosity.add_argument("--quiet", action="store_true", help="Suppress info logging")
     args = parser.parse_args()
+
+    if args.verbose:
+        setup_log_level(logging.DEBUG)
+    elif args.quiet:
+        setup_log_level(logging.WARNING)
 
     logger.info(f"Loading ablation runs from {args.input}")
     df = load_runs(args.input)

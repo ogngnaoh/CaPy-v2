@@ -11,18 +11,19 @@ Usage:
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as f
 import yaml
 
 from src.data.featurize import featurize_smiles_batch
 from src.evaluation.retrieval import compute_all_compound_retrieval_metrics
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, setup_log_level
 from src.utils.seeding import seed_everything
 
 logger = get_logger(__name__)
@@ -136,9 +137,9 @@ def _build_raw_embeddings(
         expr_raw.shape[1] ** 0.5
     )
 
-    mol = F.normalize(mol_raw @ proj_mol, dim=1)
-    morph = F.normalize(morph_raw @ proj_morph, dim=1)
-    expr = F.normalize(expr_raw @ proj_expr, dim=1)
+    mol = f.normalize(mol_raw @ proj_mol, dim=1)
+    morph = f.normalize(morph_raw @ proj_morph, dim=1)
+    expr = f.normalize(expr_raw @ proj_expr, dim=1)
 
     return {"mol": mol, "morph": morph, "expr": expr}
 
@@ -165,9 +166,9 @@ def evaluate_baseline(
         # Random embeddings (seeded for reproducibility)
         seed_everything(seed)
         embeddings = {
-            "mol": F.normalize(torch.randn(n, 256), dim=1),
-            "morph": F.normalize(torch.randn(n, 256), dim=1),
-            "expr": F.normalize(torch.randn(n, 256), dim=1),
+            "mol": f.normalize(torch.randn(n, 256), dim=1),
+            "morph": f.normalize(torch.randn(n, 256), dim=1),
+            "expr": f.normalize(torch.randn(n, 256), dim=1),
         }
         metrics = compute_all_compound_retrieval_metrics(embeddings, compound_ids)
         return {"config": config_id, "seed": seed, **metrics}
@@ -275,7 +276,17 @@ def main() -> None:
         default="data/processed",
         help="Processed data directory (for baseline evaluation)",
     )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "--verbose", action="store_true", help="Enable debug logging"
+    )
+    verbosity.add_argument("--quiet", action="store_true", help="Suppress info logging")
     args = parser.parse_args()
+
+    if args.verbose:
+        setup_log_level(logging.DEBUG)
+    elif args.quiet:
+        setup_log_level(logging.WARNING)
 
     matrix = load_matrix(args.matrix)
     runs = build_run_list(matrix, args.configs, args.seeds)

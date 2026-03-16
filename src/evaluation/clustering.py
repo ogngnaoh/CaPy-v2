@@ -38,9 +38,7 @@ def compute_moa_clustering(
         k_values = [5, 10, 20]
 
     # Filter out null MOA labels
-    valid_indices = [
-        i for i, label in enumerate(moa_labels) if label is not None
-    ]
+    valid_indices = [i for i, label in enumerate(moa_labels) if label is not None]
     if not valid_indices:
         logger.warning("No valid MOA labels found. Skipping MOA clustering.")
         return {}
@@ -97,9 +95,7 @@ def compute_moa_clustering(
     kmeans_labels = kmeans.fit_predict(emb_np)
 
     # AMI and ARI
-    metrics["AMI"] = float(
-        adjusted_mutual_info_score(true_labels, kmeans_labels)
-    )
+    metrics["AMI"] = float(adjusted_mutual_info_score(true_labels, kmeans_labels))
     metrics["ARI"] = float(adjusted_rand_score(true_labels, kmeans_labels))
 
     logger.info(
