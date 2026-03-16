@@ -486,8 +486,8 @@ significant by Welch's t-test with 5 seeds per condition.
 | T1 vs. B4 | Compound mean R@10 | 36.8% +/- 0.8% | 12.5% +/- 0.5% | < 1e-10 | Yes |
 | T1 vs. B5 | Compound mean R@10 | 36.8% +/- 0.8% | 11.8% +/- 0.9% | < 1e-10 | Yes |
 | T1 vs. B6 | Compound mean R@10 | 36.8% +/- 0.8% | 73.4% +/- 0.8% | < 1e-10 | Yes |
-| T1 vs. B6 | morph->expr R@10 | 88.4% +/- 0.8% | 73.8% +/- 0.8% | < 1e-13 | Yes |
-| T1 vs. B6 | expr->morph R@10 | 86.9% +/- 0.8% | 73.0% +/- 0.8% | < 1e-13 | Yes |
+| T1 vs. B6 | morph->expr R@10 | 88.4% +/- 1.0% | 73.8% +/- 1.4% | < 1e-13 | Yes |
+| T1 vs. B6 | expr->morph R@10 | 86.9% +/- 0.5% | 73.0% +/- 1.2% | < 1e-13 | Yes |
 
 All p-values survive Bonferroni correction (alpha = 0.05 / 3 = 0.0167 for
 the three primary comparisons). The effect sizes are large: the T1 vs. B6
