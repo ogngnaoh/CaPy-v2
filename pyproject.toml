@@ -45,9 +45,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/hoangngo610/CaPy-v2"
-Repository = "https://github.com/hoangngo610/CaPy-v2"
-Issues = "https://github.com/hoangngo610/CaPy-v2/issues"
+Homepage = "https://github.com/ogngnaoh/CaPy-v2"
+Repository = "https://github.com/ogngnaoh/CaPy-v2"
+Issues = "https://github.com/ogngnaoh/CaPy-v2/issues"
 
 [project.optional-dependencies]
 dev = [

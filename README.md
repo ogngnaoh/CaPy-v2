@@ -1,6 +1,6 @@
 # CaPy v2 -- Contrastive Alignment of Phenotypic Yields
 
-[![Tests](https://github.com/hoangngo610/CaPy-v2/actions/workflows/test.yml/badge.svg)](https://github.com/hoangngo610/CaPy-v2/actions/workflows/test.yml)
+[![Tests](https://github.com/ogngnaoh/CaPy-v2/actions/workflows/test.yml/badge.svg)](https://github.com/ogngnaoh/CaPy-v2/actions/workflows/test.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -36,7 +36,7 @@ is bottlenecked by the ECFP representation (~11.5%), invariant across configurat
 
 | Direction | T1 (5-seed mean) | Best Bi-modal | Delta |
 |-----------|------------------:|--------------:|------:|
-| morph -> expr | 88.4% | 74.0% (B6) | +14.4pp |
+| morph -> expr | 88.4% | 73.8% (B6) | +14.6pp |
 | expr -> morph | 86.9% | 73.0% (B6) | +13.9pp |
 | mol -> morph | ~11.5% | ~12.5% (B4) | -- |
 | mol -> expr | ~11.5% | ~11.8% (B5) | -- |
@@ -83,7 +83,7 @@ VICReg operates on pre-projection encoder outputs.
 ### Installation
 
 ```bash
-git clone https://github.com/hoangngo610/CaPy-v2.git
+git clone https://github.com/ogngnaoh/CaPy-v2.git
 cd CaPy-v2
 pip install -e ".[dev]"
 ```
@@ -240,15 +240,12 @@ CaPy-v2/
 ├── scripts/                      # CLI entry points (train, evaluate, ablations, etc.)
 ├── tests/                        # pytest test suite
 ├── notebooks/
-│   ├── colab_training.ipynb      # Google Colab notebook (H100 GPU training)
 │   └── demo.ipynb                # CPU demo notebook (synthetic data)
 ├── data/                         # Raw + processed data (gitignored)
 ├── results/                      # Metrics, plots, tables
 ├── checkpoints/                  # Model checkpoints (gitignored)
 ├── Makefile                      # Make targets
-├── pyproject.toml                # Dependencies and tool config
-├── capy_v2_prd.md                # Product requirements document
-└── capy_v2_fsd.md                # Functional specification document
+└── pyproject.toml                # Dependencies and tool config
 ```
 
 ---
@@ -302,7 +299,7 @@ If you use CaPy v2 in your research, please cite:
   author    = {Ngo, Hoang},
   title     = {{CaPy v2}: Tri-Modal Contrastive Alignment of Phenotypic Yields},
   year      = {2026},
-  url       = {https://github.com/hoangngo610/CaPy-v2},
+  url       = {https://github.com/ogngnaoh/CaPy-v2},
 }
 ```
 

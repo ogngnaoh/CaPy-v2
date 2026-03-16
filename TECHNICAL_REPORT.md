@@ -18,7 +18,7 @@ regularization. Through a 24-run ablation study (8 conditions, 5 seeds) on the
 LINCS cpg0004 dataset (A549 cell line), we demonstrate that adding molecular
 structure significantly improves phenotype-phenotype alignment: tri-modal
 morph-to-expr compound R@10 reaches 88.4% versus 73.8% for the best bi-modal
-baseline (p < 1e-13, Welch's t-test). However, molecule-containing retrieval
+baseline on that direction (B6, p < 1e-13, Welch's t-test). However, molecule-containing retrieval
 directions remain at approximately 12%, invariant across all configurations,
 revealing a representation ceiling imposed by ECFP fingerprints. We identify
 three technical innovations that were critical for stable tri-modal training:
@@ -396,10 +396,10 @@ against the relevant bi-modal baseline for each direction.
 
 | Direction | T1 | Best Bi-modal | Delta | Bi-modal Config |
 |-----------|----|---------------|-------|-----------------|
-| mol -> morph | 13.3% | 11.8% | +1.5 pp | B4 |
-| morph -> mol | 14.2% | 13.2% | +1.0 pp | B4 |
-| mol -> expr | 12.4% | 11.6% | +0.8 pp | B5 |
-| expr -> mol | 10.7% | 12.0% | -1.3 pp | B5 |
+| mol -> morph | 11.6% | 11.8% | -0.2 pp | B4 |
+| morph -> mol | 10.9% | 13.2% | -2.3 pp | B4 |
+| mol -> expr | 11.3% | 11.6% | -0.3 pp | B5 |
+| expr -> mol | 11.5% | 12.0% | -0.5 pp | B5 |
 | **morph -> expr** | **88.4%** | **73.8%** | **+14.6 pp** | **B6** |
 | **expr -> morph** | **86.9%** | **73.0%** | **+13.9 pp** | **B6** |
 
@@ -410,8 +410,9 @@ percentage points (86.9% vs. 73.0%).** This is the "molecular bridge" effect:
 molecular structure provides a complementary learning signal that helps the
 model discover better-aligned phenotypic representations.
 
-Conversely, molecule-containing directions remain at approximately 11-14%
-regardless of whether the model is bi-modal or tri-modal. This indicates a
+Conversely, molecule-containing directions remain at approximately 11-13%
+regardless of whether the model is bi-modal or tri-modal (T1 is slightly
+below the bi-modal baselines on these directions). This indicates a
 **representation ceiling imposed by ECFP fingerprints**, not a training
 failure. ECFP encodes molecular topology (atom connectivity and local
 neighborhoods) but is agnostic to 3D conformation, electronic properties, and
@@ -776,10 +777,10 @@ bfloat16 mixed precision. A single training run completes in approximately
 | B1 | 5.2% | 5.2% | 5.2% | 5.2% | 5.2% | 5.2% | 5.2% |
 | B2 | 5.1% | 5.1% | 5.1% | 5.1% | 5.1% | 5.1% | 5.1% |
 | B3 | 6.4% | 6.4% | 6.4% | 6.4% | 6.4% | 6.4% | 6.4% |
-| B4 | 11.8% +/- 0.5% | 13.2% +/- 0.5% | -- | -- | -- | -- | 12.5% +/- 0.5% |
-| B5 | -- | -- | 11.6% +/- 0.9% | 12.0% +/- 0.9% | -- | -- | 11.8% +/- 0.9% |
-| B6 | -- | -- | -- | -- | 73.8% +/- 0.8% | 73.0% +/- 0.8% | 73.4% +/- 0.8% |
-| T1 | 11.6% +/- 0.5% | 10.9% +/- 0.5% | 11.3% +/- 0.6% | 11.5% +/- 0.6% | 88.4% +/- 0.8% | 86.9% +/- 0.8% | 36.8% +/- 0.8% |
+| B4 | 11.8% +/- 0.7% | 13.2% +/- 1.7% | -- | -- | -- | -- | 12.5% +/- 0.5% |
+| B5 | -- | -- | 11.6% +/- 1.4% | 12.0% +/- 0.5% | -- | -- | 11.8% +/- 0.9% |
+| B6 | -- | -- | -- | -- | 73.8% +/- 1.4% | 73.0% +/- 1.2% | 73.4% +/- 0.8% |
+| T1 | 11.6% +/- 1.8% | 10.9% +/- 2.4% | 11.3% +/- 0.6% | 11.5% +/- 1.4% | 88.4% +/- 1.0% | 86.9% +/- 0.5% | 36.8% +/- 0.8% |
 
 Note: Dashes indicate directions not measurable for that configuration (e.g.,
 B4 cannot compute mol-to-expr because it has no expression encoder).
