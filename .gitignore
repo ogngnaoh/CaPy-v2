@@ -4,6 +4,21 @@ data/processed/
 
 # Outputs
 checkpoints/
+results/ablation_runs.jsonl
+results/test_model_seed42_metrics.json
+ablation_runs.jsonl
+
+# Internal docs
+CLAUDE.md
+DEVLOG.md
+capy_v2_prd.md
+capy_v2_fsd.md
+
+# Claude Code tooling
+.claude/
+
+# Colab notebook (internal)
+notebooks/colab_training.ipynb
 
 # Python
 *.pyc
@@ -12,6 +27,7 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+.coverage
 
 # Environment
 .env
@@ -27,3 +43,4 @@ htmlcov/
 
 # OS
 .DS_Store
+AWSCLIV2.pkg
